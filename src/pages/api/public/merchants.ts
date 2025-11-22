@@ -38,9 +38,8 @@ export default async function handler(
       id: merchant.id,
       name: merchant.name,
       warehouse1: merchant.warehouse1,
-      warehouse2: merchant.warehouse2,
-      defaultWarehouse: merchant.defaultWarehouse,
-      groupName: merchant.groupName
+      groupName: merchant.groupName,
+      mentionList: merchant.mentionList
     }));
 
     return res.status(200).json({

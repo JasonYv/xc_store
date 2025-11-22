@@ -114,9 +114,11 @@ export default function OrdersPage() {
             {/* 分页 */}
             {totalPages > 1 && (
               <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
+                total={total}
+                pageSize={pageSize}
+                current={currentPage}
+                onChange={handlePageChange}
+                onPageSizeChange={() => {}}
               />
             )}
           </>

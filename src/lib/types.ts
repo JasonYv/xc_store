@@ -93,4 +93,4 @@ export interface ProductSalesOrder {
 }
 
 // 分页相关类型（从pagination.ts导出）
-export { PaginationParams, PaginationResult } from './pagination'; 
+export type { PaginationParams, PaginationResult } from './pagination'; 

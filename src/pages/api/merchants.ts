@@ -44,7 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           warehouse1: req.body.warehouse1,
           groupName: req.body.groupName,
           sendMessage: req.body.sendMessage,
-          mentionList: req.body.mentionList
+          mentionList: req.body.mentionList,
+          subAccount: req.body.subAccount || '',
+          pinduoduoPassword: req.body.pinduoduoPassword || '',
+          cookie: req.body.cookie || ''
         });
         return res.status(201).json(newMerchant);
 

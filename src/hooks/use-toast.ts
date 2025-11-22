@@ -1,9 +1,15 @@
 import * as React from "react"
 
-import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
-
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
+
+export type ToastActionElement = React.ReactElement<any>
+
+export interface ToastProps {
+  variant?: "default" | "destructive"
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}
 
 type ToasterToast = ToastProps & {
   id: string
@@ -132,7 +138,7 @@ function dispatch(action: Action) {
   })
 }
 
-type Toast = Omit<ToasterToast, "id">
+export type Toast = Omit<ToasterToast, "id">
 
 function toast({ ...props }: Toast) {
   const id = genId()
