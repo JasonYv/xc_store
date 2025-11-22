@@ -64,7 +64,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const messageList = merchantsToSend.map((merchant: Merchant) => ({
             type: 203,
             titleList: [merchant.groupName],
-            receivedContent: MESSAGE_TEMPLATES[messageType]
+            receivedContent: MESSAGE_TEMPLATES[messageType],
+            atList: merchant.mentionList && merchant.mentionList.length > 0
+                ? merchant.mentionList
+                : []
         }));
 
         // 构建请求数据
@@ -94,8 +97,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const results = merchantsToSend.map((merchant: Merchant) => ({
             merchantId: merchant.id,
             groupName: merchant.groupName,
+            atList: merchant.mentionList || [],
             status: 'success',
-            message: `消息已发送到群组: ${merchant.groupName}`
+            message: `消息已发送到群组: ${merchant.groupName}${
+                merchant.mentionList && merchant.mentionList.length > 0
+                    ? ` (@ ${merchant.mentionList.join(', ')})`
+                    : ''
+            }`
         }));
 
         return res.status(200).json({
