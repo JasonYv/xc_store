@@ -231,6 +231,12 @@ export class SqliteDatabase {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN cookie TEXT NOT NULL DEFAULT ''`);
         console.log('Added cookie column to merchants table');
       }
+
+      // 添加 pinduoduoShopId 列
+      if (!columnNames.includes('pinduoduoShopId')) {
+        await this.db.exec(`ALTER TABLE merchants ADD COLUMN pinduoduoShopId TEXT NOT NULL DEFAULT ''`);
+        console.log('Added pinduoduoShopId column to merchants table');
+      }
     } catch (error) {
       console.error('Error migrating columns:', error);
     }
@@ -339,13 +345,14 @@ export class SqliteDatabase {
     const createdAt = new Date().toISOString();
 
     await this.db.run(
-      `INSERT INTO merchants (id, createdAt, name, merchantId, pinduoduoName, warehouse1, groupName, sendMessage, mentionList, subAccount, pinduoduoPassword, cookie)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO merchants (id, createdAt, name, merchantId, pinduoduoName, pinduoduoShopId, warehouse1, groupName, sendMessage, mentionList, subAccount, pinduoduoPassword, cookie)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       createdAt,
       merchant.name,
       merchant.merchantId || '',
       merchant.pinduoduoName || '',
+      merchant.pinduoduoShopId || '',
       merchant.warehouse1,
       merchant.groupName,
       merchant.sendMessage ? 1 : 0,
@@ -384,6 +391,21 @@ export class SqliteDatabase {
 
     const rows = await this.db.all('SELECT * FROM merchants');
     return rows.map(row => this.rowToMerchant(row));
+  }
+
+  // 根据商家名称查找商家
+  async getMerchantByName(name: string): Promise<Merchant | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM merchants WHERE name = ?',
+      name
+    );
+
+    if (!row) return null;
+
+    return this.rowToMerchant(row);
   }
 
   async getMerchantsPaginated(
@@ -805,6 +827,7 @@ export class SqliteDatabase {
       name: row.name,
       merchantId: row.merchantId || '',
       pinduoduoName: row.pinduoduoName || '',
+      pinduoduoShopId: row.pinduoduoShopId || '',
       warehouse1: row.warehouse1,
       groupName: row.groupName,
       sendMessage: !!row.sendMessage,

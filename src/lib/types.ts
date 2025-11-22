@@ -4,6 +4,7 @@ export interface Merchant {
   name: string;
   merchantId: string;
   pinduoduoName: string;
+  pinduoduoShopId: string;   // 多多买菜店铺ID
   warehouse1: string;
   groupName: string;
   sendMessage: boolean;
@@ -45,6 +46,7 @@ export interface MerchantFormData {
   name: string;
   merchantId: string;
   pinduoduoName: string;
+  pinduoduoShopId: string;   // 多多买菜店铺ID
   warehouse1: string;
   groupName: string;
   sendMessage: boolean;
