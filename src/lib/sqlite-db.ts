@@ -919,6 +919,27 @@ export class SqliteDatabase {
     return this.rowToProduct(row);
   }
 
+  // 根据多多买菜商品ID和店铺ID查询商品
+  async getProductByPinduoduoIdAndShopId(pinduoduoProductId: string, pinduoduoShopId: string): Promise<Product | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 先根据店铺ID查找商家
+    const merchant = await this.getMerchantByPinduoduoShopId(pinduoduoShopId);
+    if (!merchant) return null;
+
+    // 然后查找该商家下的指定商品
+    const row = await this.db.get(
+      'SELECT * FROM products WHERE pinduoduoProductId = ? AND merchantId = ?',
+      pinduoduoProductId,
+      merchant.id
+    );
+
+    if (!row) return null;
+
+    return this.rowToProduct(row);
+  }
+
   async getProductsPaginated(
     page: number,
     pageSize: number,
