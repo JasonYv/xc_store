@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import MerchantForm from '@/components/merchant/MerchantForm';
 import MerchantTable from '@/components/merchant/MerchantTable';
 import MerchantSearch, { SearchFilters } from '@/components/merchant/MerchantSearch';
+import SendMessageDialog from '@/components/merchant/SendMessageDialog';
 import Modal from '@/components/common/Modal';
 import Loading from '@/components/common/Loading';
 import { Merchant } from '@/lib/types';
@@ -37,6 +38,7 @@ export default function MerchantsPage() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [editingMerchant, setEditingMerchant] = useState<Merchant | undefined>();
+  const [sendMessageMerchant, setSendMessageMerchant] = useState<Merchant | null>(null);
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     name: '',
     merchantId: '',
@@ -214,19 +216,19 @@ export default function MerchantsPage() {
 
   const handleFormSubmit = async (formData: Partial<Merchant>) => {
     try {
-      const url = editingMerchant 
-        ? `/api/merchants?id=${editingMerchant.id}` 
+      const url = editingMerchant
+        ? `/api/merchants?id=${editingMerchant.id}`
         : '/api/merchants';
-      
+
       const method = editingMerchant ? 'PUT' : 'POST';
 
       // 准备提交的数据
-      const submitData = editingMerchant 
+      const submitData = editingMerchant
         ? {
             ...formData,
             id: editingMerchant.id,
             createdAt: editingMerchant.createdAt
-          } 
+          }
         : {
             ...formData,
             id: Date.now().toString(),
@@ -253,6 +255,14 @@ export default function MerchantsPage() {
       console.error('保存商家数据错误:', error);
     }
   };
+
+  const handleSendMessage = useCallback((merchant: Merchant) => {
+    setSendMessageMerchant(merchant);
+  }, []);
+
+  const handleCloseSendMessage = useCallback(() => {
+    setSendMessageMerchant(null);
+  }, []);
   
   if (!mounted) {
     return (
@@ -285,6 +295,7 @@ export default function MerchantsPage() {
         onSort={handleSort}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onSendMessage={handleSendMessage}
       />
       
       {isOpen && (
@@ -306,6 +317,12 @@ export default function MerchantsPage() {
           />
         </Modal>
       )}
+
+      <SendMessageDialog
+        open={!!sendMessageMerchant}
+        onClose={handleCloseSendMessage}
+        merchant={sendMessageMerchant}
+      />
     </DashboardLayout>
   );
 } 

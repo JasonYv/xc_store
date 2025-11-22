@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, XCircle, MoreVertical, Edit, Copy, Star, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, XCircle, MoreVertical, Edit, Copy, Star, Trash2, MessageSquare } from "lucide-react";
 import { Merchant } from '@/lib/types';
 
 interface MerchantTableProps {
@@ -47,6 +47,7 @@ interface MerchantTableProps {
   onSort: (field: string) => void;
   onEdit: (merchant: Merchant) => void;
   onDelete: (id: string) => void;
+  onSendMessage: (merchant: Merchant) => void;
 }
 
 export default function MerchantTable({
@@ -62,7 +63,8 @@ export default function MerchantTable({
   onPageSizeChange,
   onSort,
   onEdit,
-  onDelete
+  onDelete,
+  onSendMessage
 }: MerchantTableProps) {
   // 返回排序图标
   const getSortIcon = (field: string) => {
@@ -204,10 +206,14 @@ export default function MerchantTable({
                           <span className="sr-only">打开菜单</span>
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-28">
+                      <DropdownMenuContent align="end" className="w-36">
                         <DropdownMenuItem onClick={() => onEdit(merchant)}>
                           <Edit className="mr-2 h-4 w-4" />
                           编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onSendMessage(merchant)}>
+                          <MessageSquare className="mr-2 h-4 w-4" />
+                          发送消息
                         </DropdownMenuItem>
 
                         <DropdownMenuSeparator />
