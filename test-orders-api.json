@@ -1,0 +1,15 @@
+{
+  "shop_name": "测试店铺",
+  "shop_id": "12345",
+  "product_id": "prod_001",
+  "product_name": "新鲜苹果",
+  "product_image": "https://example.com/apple.jpg",
+  "sales_area": "北京市朝阳区",
+  "warehouse_info": "1号仓库",
+  "sales_date": "2025-11-15",
+  "sales_spec": "500g/份",
+  "total_stock": 1000,
+  "estimated_sales": 800,
+  "total_sales": 750,
+  "sales_quantity": 150
+}

@@ -1,0 +1,344 @@
+{
+  "merchants": [
+    {
+      "id": "1737447777945",
+      "createdAt": "2025-01-21T08:22:57.945Z",
+      "name": "ccccc",
+      "warehouse1": "123123",
+      "warehouse2": "12312312",
+      "defaultWarehouse": "123123",
+      "groupName": "21312312",
+      "sendMessage": false
+    },
+    {
+      "id": "1737512549120",
+      "createdAt": "2025-01-22T02:22:29.120Z",
+      "name": "恒安",
+      "warehouse1": "恒安1仓",
+      "warehouse2": "恒安2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "恒安乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737512594736",
+      "createdAt": "2025-01-22T02:23:14.736Z",
+      "name": "鑫壹旺",
+      "warehouse1": "鑫壹旺1仓",
+      "warehouse2": "鑫壹旺2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "鑫壹旺乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737512639720",
+      "createdAt": "2025-01-22T02:23:59.720Z",
+      "name": "嘉乐怡",
+      "warehouse1": "嘉乐怡1仓",
+      "warehouse2": "嘉乐怡2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "嘉乐怡商贸乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737512695834",
+      "createdAt": "2025-01-22T02:24:55.834Z",
+      "name": "尚尚纸品",
+      "warehouse1": "尚尚纸品1仓",
+      "warehouse2": "尚尚纸品2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "尚尚纸品乌市炫朝云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513007664",
+      "createdAt": "2025-01-22T02:30:07.664Z",
+      "name": "蓝天食品",
+      "warehouse1": "蓝天1仓",
+      "warehouse2": "蓝天2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "蓝天食品经销部云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513112848",
+      "createdAt": "2025-01-22T02:31:52.848Z",
+      "name": "南昌粤辉",
+      "warehouse1": "南昌粤辉1仓",
+      "warehouse2": "南昌粤辉2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "新彊南昌粤辉食品云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513216160",
+      "createdAt": "2025-01-22T02:33:36.160Z",
+      "name": "凡语食品",
+      "warehouse1": "凡语1仓",
+      "warehouse2": "凡语2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "凡语食品乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513245592",
+      "createdAt": "2025-01-22T02:34:05.592Z",
+      "name": "悦动力",
+      "warehouse1": "悦动力1仓",
+      "warehouse2": "悦动力2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "悦动力旗舰店乌市云仓业务群",
+      "sendMessage": false
+    },
+    {
+      "id": "1737513321872",
+      "createdAt": "2025-01-22T02:35:21.872Z",
+      "name": "味乐奇食品",
+      "warehouse1": "味乐奇1仓",
+      "warehouse2": "味乐奇2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "味乐奇食品官方旗舰店乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513359040",
+      "createdAt": "2025-01-22T02:35:59.040Z",
+      "name": "繁世锦",
+      "warehouse1": "繁世锦1仓",
+      "warehouse2": "繁世锦2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "繁世锦食品云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513390984",
+      "createdAt": "2025-01-22T02:36:30.984Z",
+      "name": "亿点点",
+      "warehouse1": "亿点点1仓",
+      "warehouse2": "亿点点2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "亿点点乌市云仓业务群",
+      "sendMessage": false
+    },
+    {
+      "id": "1737513423248",
+      "createdAt": "2025-01-22T02:37:03.248Z",
+      "name": "小彭的网店",
+      "warehouse1": "小彭的网店1仓",
+      "warehouse2": "小彭的网店2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "小彭的网店乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513452480",
+      "createdAt": "2025-01-22T02:37:32.480Z",
+      "name": "金钱宝供应链",
+      "warehouse1": "金钱宝1仓",
+      "warehouse2": "金钱宝2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "金钱宝供应链乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513508568",
+      "createdAt": "2025-01-22T02:38:28.568Z",
+      "name": "黄种人口腔护理",
+      "warehouse1": "黄种人1仓",
+      "warehouse2": "黄种人2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "黄种人口腔护理乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513538608",
+      "createdAt": "2025-01-22T02:38:58.608Z",
+      "name": "无念宠物用品",
+      "warehouse1": "无念1仓",
+      "warehouse2": "无念2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "无念宠物用品乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513590208",
+      "createdAt": "2025-01-22T02:39:50.208Z",
+      "name": "生活工坊",
+      "warehouse1": "生活工坊1仓",
+      "warehouse2": "生活工坊2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "生活工坊乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513618696",
+      "createdAt": "2025-01-22T02:40:18.696Z",
+      "name": "鲁知味",
+      "warehouse1": "鲁知味1仓",
+      "warehouse2": "鲁知味2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "鲁知味活珠乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513672736",
+      "createdAt": "2025-01-22T02:41:12.736Z",
+      "name": "陇鑫源",
+      "warehouse1": "陇鑫源1仓",
+      "warehouse2": "陇鑫源2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "陇鑫源食品乌市炫朝云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513698504",
+      "createdAt": "2025-01-22T02:41:38.504Z",
+      "name": "巴蜀酒",
+      "warehouse1": "巴蜀酒1仓",
+      "warehouse2": "巴蜀酒2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "巴蜀酒乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513728864",
+      "createdAt": "2025-01-22T02:42:08.864Z",
+      "name": "鑫玉唐",
+      "warehouse1": "鑫玉唐1仓",
+      "warehouse2": "鑫玉唐2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "鑫玉唐食品乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513751232",
+      "createdAt": "2025-01-22T02:42:31.232Z",
+      "name": "家乐通",
+      "warehouse1": "家乐通1仓",
+      "warehouse2": "家乐通2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "家乐通云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513782216",
+      "createdAt": "2025-01-22T02:43:02.216Z",
+      "name": "赞优",
+      "warehouse1": "赞优1仓",
+      "warehouse2": "赞优2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "赞优云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513810248",
+      "createdAt": "2025-01-22T02:43:30.248Z",
+      "name": "宜丰供应",
+      "warehouse1": "宜丰供应1仓",
+      "warehouse2": "宜丰供应2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "宜丰供应乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513846112",
+      "createdAt": "2025-01-22T02:44:06.112Z",
+      "name": "王羊羊",
+      "warehouse1": "王羊羊1仓",
+      "warehouse2": "王羊羊2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "王羊羊乌市云仓业务群",
+      "sendMessage": false
+    },
+    {
+      "id": "1737513869632",
+      "createdAt": "2025-01-22T02:44:29.632Z",
+      "name": "天天捞",
+      "warehouse1": "天天捞1仓",
+      "warehouse2": "天天捞2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "天天捞乌市云仓业务群",
+      "sendMessage": false
+    },
+    {
+      "id": "1737513897049",
+      "createdAt": "2025-01-22T02:44:57.049Z",
+      "name": "雨然家居",
+      "warehouse1": "雨然家居1仓",
+      "warehouse2": "雨然家居2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "雨然家居新疆云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737513940280",
+      "createdAt": "2025-01-22T02:45:40.280Z",
+      "name": "炫朝供应链",
+      "warehouse1": "炫朝1仓",
+      "warehouse2": "炫朝2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "炫朝供应链云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1737821102478",
+      "createdAt": "2025-01-25T16:05:02.478Z",
+      "name": "金良谷面点",
+      "warehouse1": "金良谷面点1仓",
+      "warehouse2": "金良谷面点2仓",
+      "defaultWarehouse": "warehouse1",
+      "groupName": "金良谷面点春节履约业务群",
+      "sendMessage": false
+    },
+    {
+      "id": "1741133851003",
+      "createdAt": "2025-03-05T00:17:31.003Z",
+      "name": "煲利商行",
+      "warehouse1": "煲利商行1仓",
+      "warehouse2": "煲利商行2仓",
+      "defaultWarehouse": "煲利商行1仓",
+      "groupName": "煲利商行炫朝云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1741963341209",
+      "createdAt": "2025-03-14T14:42:21.209Z",
+      "name": "优谷益品",
+      "warehouse1": "优谷益品1仓",
+      "warehouse2": "优谷益品2仓",
+      "defaultWarehouse": "优谷益品1仓",
+      "groupName": "优谷益品炫朝云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1742744518830",
+      "createdAt": "2025-03-23T15:41:58.830Z",
+      "name": "熙熙全国供应链",
+      "warehouse1": "熙熙全国供应链1仓",
+      "warehouse2": "熙熙全国供应链2仓",
+      "defaultWarehouse": "熙熙全国供应链1仓",
+      "groupName": "熙熙全国供应链乌市云仓业务群",
+      "sendMessage": true
+    },
+    {
+      "id": "1743555297558",
+      "createdAt": "2025-04-02T00:54:57.558Z",
+      "name": "源慰科技",
+      "warehouse1": "源慰科技1仓",
+      "warehouse2": "源慰科技2仓",
+      "defaultWarehouse": "源慰科技1仓",
+      "groupName": "源慰科技有限公司炫朝云仓业务群",
+      "sendMessage": false
+    },
+    {
+      "id": "1743679767749",
+      "createdAt": "2025-04-03T11:29:27.749Z",
+      "name": "玥玥商贸",
+      "warehouse1": "玥玥商贸1仓",
+      "warehouse2": "玥玥商贸2仓",
+      "defaultWarehouse": "玥玥商贸1仓",
+      "groupName": "玥玥商贸供应链炫朝云仓业务群",
+      "sendMessage": true
+    }
+  ]
+}
