@@ -33,19 +33,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+        // 初始化数据库连接
+        await db.init();
+        await db.migrateFromJson();
+
+        // 验证API Key - 从数据库读取系统设置中的 API Key
+        const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+        const systemApiKey = await db.getSetting('apiKey');
+
+        if (!apiKey || !systemApiKey || apiKey !== systemApiKey) {
+            return res.status(401).json({
+                success: false,
+                error: '无效的API密钥',
+                message: 'API Key 无效'
+            });
+        }
+
         // 获取消息类型
         const messageType = (req.method === 'GET'
             ? req.query.type?.toString()
             : req.body.type) as MessageType;
 
         if (!messageType || !MESSAGE_TEMPLATES[messageType]) {
-            return res.status(400).json({ 
-                error: 'Invalid message type. Must be one of: A, B, C, D' 
+            return res.status(400).json({
+                error: 'Invalid message type. Must be one of: A, B, C, D'
             });
         }
 
         // 读取商家数据
-        await db.init();  // 初始化数据库连接
         const merchants = await db.getAllMerchants();  // 从SQLite获取所有商家
         
         // 过滤需要发送消息的商家
