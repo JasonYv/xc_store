@@ -237,6 +237,16 @@ export class SqliteDatabase {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN pinduoduoShopId TEXT NOT NULL DEFAULT ''`);
         console.log('Added pinduoduoShopId column to merchants table');
       }
+
+      // 检查 products 表的列
+      const productColumns = await this.db.all('PRAGMA table_info(products)');
+      const productColumnNames = productColumns.map((col: any) => col.name);
+
+      // 添加 productSpec 列到 products 表
+      if (!productColumnNames.includes('productSpec')) {
+        await this.db.exec(`ALTER TABLE products ADD COLUMN productSpec TEXT NOT NULL DEFAULT ''`);
+        console.log('Added productSpec column to products table');
+      }
     } catch (error) {
       console.error('Error migrating columns:', error);
     }
@@ -401,6 +411,21 @@ export class SqliteDatabase {
     const row = await this.db.get(
       'SELECT * FROM merchants WHERE name = ?',
       name
+    );
+
+    if (!row) return null;
+
+    return this.rowToMerchant(row);
+  }
+
+  // 根据多多买菜店铺ID查找商家
+  async getMerchantByPinduoduoShopId(pinduoduoShopId: string): Promise<Merchant | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM merchants WHERE pinduoduoShopId = ?',
+      pinduoduoShopId
     );
 
     if (!row) return null;
@@ -860,14 +885,15 @@ export class SqliteDatabase {
     const createdAt = new Date().toISOString();
 
     await this.db.run(
-      `INSERT INTO products (id, createdAt, pinduoduoProductId, pinduoduoProductImage, productName, pinduoduoProductName, merchantId)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (id, createdAt, pinduoduoProductId, pinduoduoProductImage, productName, pinduoduoProductName, productSpec, merchantId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       createdAt,
       product.pinduoduoProductId || '',
       product.pinduoduoProductImage || '',
       product.productName,
       product.pinduoduoProductName || '',
+      product.productSpec || '',
       product.merchantId
     );
 
@@ -1016,6 +1042,7 @@ export class SqliteDatabase {
       pinduoduoProductImage: row.pinduoduoProductImage || '',
       productName: row.productName,
       pinduoduoProductName: row.pinduoduoProductName || '',
+      productSpec: row.productSpec || '',
       merchantId: row.merchantId
     };
   }

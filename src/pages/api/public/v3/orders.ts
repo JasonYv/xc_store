@@ -93,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       salesQuantity: Number(data.sales_quantity)
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: '订单数据保存成功',
       data: {

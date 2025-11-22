@@ -64,6 +64,7 @@ export interface Product {
   pinduoduoProductImage: string;
   productName: string;
   pinduoduoProductName: string;
+  productSpec: string;         // 商品规格
   merchantId: string;
 }
 
@@ -72,6 +73,7 @@ export interface ProductFormData {
   pinduoduoProductImage: string;
   productName: string;
   pinduoduoProductName: string;
+  productSpec: string;         // 商品规格
   merchantId: string;
 }
 
