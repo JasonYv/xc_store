@@ -91,6 +91,25 @@ export class SqliteDatabase {
         )
       `);
 
+      // 创建settings表
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )
+      `);
+
+      // 检查是否需要创建默认设置
+      const settingsCount = await this.db.get(
+        'SELECT COUNT(*) as count FROM settings'
+      );
+
+      if (settingsCount.count === 0) {
+        // 创建默认设置，包括 API Key
+        await this.createDefaultSettings();
+      }
+
       // 检查是否需要创建默认管理员账号
       const adminExists = await this.db.get(
         'SELECT COUNT(*) as count FROM users'
@@ -110,6 +129,29 @@ export class SqliteDatabase {
       console.error('Error initializing SQLite database:', error);
       throw error;
     }
+  }
+
+  // 创建默认设置
+  private async createDefaultSettings() {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+    const defaultSettings = [
+      { key: 'apiKey', value: 'n4MBvJIdx9htUbkU0d8fpsJ7pM8bV4', updatedAt: now },
+      { key: 'systemLogs', value: 'true', updatedAt: now },
+      { key: 'multiLogin', value: 'true', updatedAt: now }
+    ];
+
+    for (const setting of defaultSettings) {
+      await this.db.run(
+        `INSERT INTO settings (key, value, updatedAt) VALUES (?, ?, ?)`,
+        setting.key,
+        setting.value,
+        setting.updatedAt
+      );
+    }
+
+    console.log('Default settings created');
   }
 
   // 创建默认管理员账号
@@ -666,6 +708,70 @@ export class SqliteDatabase {
     );
 
     return result.changes ? result.changes > 0 : false;
+  }
+
+  // ===== Settings 相关方法 =====
+
+  // 获取设置值
+  async getSetting(key: string): Promise<string | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT value FROM settings WHERE key = ?',
+      key
+    );
+
+    return row ? row.value : null;
+  }
+
+  // 获取所有设置
+  async getAllSettings(): Promise<Record<string, string>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all('SELECT key, value FROM settings');
+
+    const settings: Record<string, string> = {};
+    for (const row of rows) {
+      settings[row.key] = row.value;
+    }
+
+    return settings;
+  }
+
+  // 更新设置
+  async updateSetting(key: string, value: string): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT OR REPLACE INTO settings (key, value, updatedAt) VALUES (?, ?, ?)`,
+      key,
+      value,
+      now
+    );
+  }
+
+  // 批量更新设置
+  async updateSettings(settings: Record<string, string>): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+
+    await this.transaction(async () => {
+      for (const [key, value] of Object.entries(settings)) {
+        await this.db!.run(
+          `INSERT OR REPLACE INTO settings (key, value, updatedAt) VALUES (?, ?, ?)`,
+          key,
+          value,
+          now
+        );
+      }
+    });
   }
 
   // ===== 公用方法 =====

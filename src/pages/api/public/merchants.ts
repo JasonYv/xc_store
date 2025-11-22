@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { CONFIG } from '@/config';
 import db from '@/lib/sqlite-db';
 import { Merchant } from '@/lib/types';
 
@@ -17,15 +16,17 @@ export default async function handler(
     return res.status(405).json({ error: '不支持的请求方法' });
   }
 
-  // API key 验证
-  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-  if (!apiKey || apiKey !== CONFIG.api.key) {
-    return res.status(401).json({ error: '无效的API密钥' });
-  }
-
   try {
     // 初始化数据库连接
     await db.init();
+
+    // API key 验证 - 从数据库读取系统设置中的 API Key
+    const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+    const systemApiKey = await db.getSetting('apiKey');
+
+    if (!apiKey || !systemApiKey || apiKey !== systemApiKey) {
+      return res.status(401).json({ error: '无效的API密钥' });
+    }
     
     // 获取所有商家
     const merchants = await db.getAllMerchants();

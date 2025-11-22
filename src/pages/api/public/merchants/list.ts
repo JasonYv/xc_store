@@ -1,6 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import db from '@/lib/sqlite-db';
-import { CONFIG } from '@/config';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await db.init();
@@ -13,9 +12,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  // 验证API Key
+  // 验证API Key - 从数据库读取系统设置中的 API Key
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-  if (!apiKey || apiKey !== CONFIG.api.key) {
+  const systemApiKey = await db.getSetting('apiKey');
+
+  if (!apiKey || !systemApiKey || apiKey !== systemApiKey) {
     return res.status(401).json({
       success: false,
       message: 'API Key 无效'
