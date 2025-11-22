@@ -49,13 +49,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 构建消息数据
+    // 如果有 atList，在消息前添加换行，实现 @人名换行后发送消息内容
+    const hasAtList = merchant.mentionList && merchant.mentionList.length > 0;
     const messageData = {
       type: 203,
       titleList: [merchant.groupName],
-      receivedContent: message.trim(),
-      atList: merchant.mentionList && merchant.mentionList.length > 0
-        ? merchant.mentionList
-        : []
+      receivedContent: hasAtList ? `\n${message.trim()}` : message.trim(),
+      atList: hasAtList ? merchant.mentionList : []
     };
 
     // 构建请求数据

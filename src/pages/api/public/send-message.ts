@@ -61,14 +61,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         // 构建消息列表
-        const messageList = merchantsToSend.map((merchant: Merchant) => ({
-            type: 203,
-            titleList: [merchant.groupName],
-            receivedContent: MESSAGE_TEMPLATES[messageType],
-            atList: merchant.mentionList && merchant.mentionList.length > 0
-                ? merchant.mentionList
-                : []
-        }));
+        // 如果有 atList，在消息前添加换行，实现 @人名换行后发送消息内容
+        const messageList = merchantsToSend.map((merchant: Merchant) => {
+            const hasAtList = merchant.mentionList && merchant.mentionList.length > 0;
+            return {
+                type: 203,
+                titleList: [merchant.groupName],
+                receivedContent: hasAtList
+                    ? `\n${MESSAGE_TEMPLATES[messageType]}`
+                    : MESSAGE_TEMPLATES[messageType],
+                atList: hasAtList ? merchant.mentionList : []
+            };
+        });
 
         // 构建请求数据
         const requestData = {
