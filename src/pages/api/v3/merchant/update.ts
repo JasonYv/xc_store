@@ -24,18 +24,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { merchantId, pinduoduoShopId, pinduoduoName } = req.body;
+    const { id, merchantId, pinduoduoShopId, pinduoduoName } = req.body;
 
-    // 验证必填参数
-    if (!merchantId) {
+    // 验证必填参数（系统商家ID）
+    if (!id) {
       return res.status(400).json({
         success: false,
-        message: '缺少商家ID参数 (merchantId)'
+        message: '缺少商家系统ID参数 (id)'
       });
     }
 
     // 查询商家是否存在
-    const merchant = await db.getMerchantById(merchantId);
+    const merchant = await db.getMerchantById(id);
     if (!merchant) {
       return res.status(404).json({
         success: false,
@@ -45,6 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 构建更新数据（只更新提供的字段）
     const updateData: { [key: string]: any } = {};
+
+    if (merchantId !== undefined) {
+      updateData.merchantId = merchantId;
+    }
 
     if (pinduoduoShopId !== undefined) {
       updateData.pinduoduoShopId = pinduoduoShopId;
@@ -58,12 +62,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({
         success: false,
-        message: '没有需要更新的字段 (pinduoduoShopId, pinduoduoName)'
+        message: '没有需要更新的字段 (merchantId, pinduoduoShopId, pinduoduoName)'
       });
     }
 
     // 更新商家信息
-    const updatedMerchant = await db.updateMerchant(merchantId, updateData);
+    const updatedMerchant = await db.updateMerchant(id, updateData);
 
     if (!updatedMerchant) {
       return res.status(500).json({
@@ -78,6 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       data: {
         id: updatedMerchant.id,
         name: updatedMerchant.name,
+        merchantId: updatedMerchant.merchantId,
         pinduoduoShopId: updatedMerchant.pinduoduoShopId,
         pinduoduoName: updatedMerchant.pinduoduoName
       }
