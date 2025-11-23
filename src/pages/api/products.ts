@@ -40,6 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           pinduoduoProductImage: req.body.pinduoduoProductImage,
           productName: req.body.productName,
           pinduoduoProductName: req.body.pinduoduoProductName,
+          productSpec: req.body.productSpec || '',
           merchantId: req.body.merchantId
         });
         return res.status(201).json(newProduct);
