@@ -2,8 +2,8 @@ module.exports = {
   apps: [{
     name: 'merchant-management',
     cwd: '/www/wwwroot/admin.leapdeer.com',
-    script: 'npm',
-    args: 'start',
+    script: 'node_modules/next/dist/bin/next',
+    args: 'start -p 3001',
     env: {
       NODE_ENV: 'production',
       PORT: 3001,
@@ -15,6 +15,11 @@ module.exports = {
     error_file: '/www/wwwlogs/merchant-management-error.log',
     out_file: '/www/wwwlogs/merchant-management-out.log',
     log_file: '/www/wwwlogs/merchant-management-combined.log',
-    time: true
+    time: true,
+    instances: 1,
+    exec_mode: 'fork',
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '500M'
   }]
 } 
