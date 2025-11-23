@@ -2,11 +2,12 @@ module.exports = {
   apps: [{
     name: 'merchant-management',
     cwd: '/www/wwwroot/admin.leapdeer.com',
-    script: 'node_modules/next/dist/bin/next',
+    script: './node_modules/.bin/next',
     args: 'start -p 3001',
     env: {
       NODE_ENV: 'production',
       PORT: 3001,
+      BASE_URL: 'https://admin.leapdeer.com',
       API_KEY: 'n4MBvJIdx9htUbkU0d8fpsJ7pM8bV4',
       ADMIN_USERNAME: 'admin',
       ADMIN_PASSWORD: 'admin123'
