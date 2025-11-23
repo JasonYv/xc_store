@@ -18,6 +18,7 @@ export default function ProductForm({ product, onSubmit, onCancel }: ProductForm
     pinduoduoProductImage: product?.pinduoduoProductImage || '',
     productName: product?.productName || '',
     pinduoduoProductName: product?.pinduoduoProductName || '',
+    productSpec: product?.productSpec || '',
     merchantId: product?.merchantId || '',
   });
 
@@ -97,6 +98,17 @@ export default function ProductForm({ product, onSubmit, onCancel }: ProductForm
           value={formData.pinduoduoProductName}
           onChange={(e) => setFormData({ ...formData, pinduoduoProductName: e.target.value })}
           placeholder="选填"
+          className="h-8 text-sm"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label htmlFor="productSpec" className="text-xs font-medium">商品规格</label>
+        <Input
+          id="productSpec"
+          value={formData.productSpec}
+          onChange={(e) => setFormData({ ...formData, productSpec: e.target.value })}
+          placeholder="选填，例如：500g/袋"
           className="h-8 text-sm"
         />
       </div>
