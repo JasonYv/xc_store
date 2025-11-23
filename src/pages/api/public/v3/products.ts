@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       merchantId: merchant.id  // 使用查找到的商家ID
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: '商品数据保存成功',
       data: {

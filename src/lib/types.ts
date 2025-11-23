@@ -8,6 +8,7 @@ export interface Merchant {
   warehouse1: string;
   groupName: string;
   sendMessage: boolean;
+  sendOrderScreenshot: boolean; // 是否发送订单截图
   mentionList: string[];
   subAccount: string;        // 子账号
   pinduoduoPassword: string; // 多多密码
@@ -50,6 +51,7 @@ export interface MerchantFormData {
   warehouse1: string;
   groupName: string;
   sendMessage: boolean;
+  sendOrderScreenshot: boolean; // 是否发送订单截图
   mentionList: string[];
   subAccount: string;        // 子账号
   pinduoduoPassword: string; // 多多密码

@@ -27,6 +27,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
 
 # vercel
 .vercel
@@ -48,3 +49,6 @@ data/merchants.db-wal
 
 # MCP
 .mcp.json
+
+# uploads
+/public/uploads/

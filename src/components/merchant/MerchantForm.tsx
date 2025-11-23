@@ -20,9 +20,11 @@ export default function MerchantForm({ merchant, onSubmit, onCancel }: MerchantF
     name: merchant?.name || '',
     merchantId: merchant?.merchantId || '',
     pinduoduoName: merchant?.pinduoduoName || '',
+    pinduoduoShopId: merchant?.pinduoduoShopId || '',
     warehouse1: merchant?.warehouse1 || '',
     groupName: merchant?.groupName || '',
     sendMessage: merchant?.sendMessage || false,
+    sendOrderScreenshot: merchant?.sendOrderScreenshot || false,
     mentionList: merchant?.mentionList || [],
     subAccount: merchant?.subAccount || '',
     pinduoduoPassword: merchant?.pinduoduoPassword || '',
@@ -184,6 +186,15 @@ export default function MerchantForm({ merchant, onSubmit, onCancel }: MerchantF
           id="sendMessage"
         />
         <label htmlFor="sendMessage" className="text-xs font-medium">发送消息</label>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Switch
+          checked={formData.sendOrderScreenshot}
+          onCheckedChange={(checked) => setFormData({ ...formData, sendOrderScreenshot: checked })}
+          id="sendOrderScreenshot"
+        />
+        <label htmlFor="sendOrderScreenshot" className="text-xs font-medium">发送订单截图</label>
       </div>
 
       <div className="space-y-1">

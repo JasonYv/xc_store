@@ -44,10 +44,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           warehouse1: req.body.warehouse1,
           groupName: req.body.groupName,
           sendMessage: req.body.sendMessage,
+          sendOrderScreenshot: req.body.sendOrderScreenshot || false,
           mentionList: req.body.mentionList,
           subAccount: req.body.subAccount || '',
           pinduoduoPassword: req.body.pinduoduoPassword || '',
-          cookie: req.body.cookie || ''
+          cookie: req.body.cookie || '',
+          pinduoduoShopId: req.body.pinduoduoShopId || ''
         });
         return res.status(201).json(newMerchant);
 

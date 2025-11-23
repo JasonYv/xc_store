@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 获取所有商家
     const merchants = await db.getAllMerchants();
 
-    // 只返回必要的字段:id, name, subAccount, pinduoduoPassword, cookie
+    // 只返回必要的字段:id, name, subAccount, pinduoduoPassword, cookie, sendOrderScreenshot
     const credentials = merchants.map(merchant => ({
       id: merchant.id,
       name: merchant.name,
@@ -35,7 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       pinduoduoName: merchant.pinduoduoName,
       subAccount: merchant.subAccount,
       pinduoduoPassword: merchant.pinduoduoPassword,
-      cookie: merchant.cookie
+      cookie: merchant.cookie,
+      sendOrderScreenshot: merchant.sendOrderScreenshot
     }));
 
     return res.status(200).json({

@@ -134,6 +134,7 @@ export default function MerchantTable({
                   {getSortIcon("sendMessage")}
                 </Button>
               </TableHead>
+              <TableHead className="font-medium h-9 py-1 px-2">发送截图</TableHead>
               <TableHead className="font-medium h-9 py-1 px-2 min-w-[150px]">艾特对象</TableHead>
               <TableHead className="font-medium h-9 py-1 px-2 w-[90px] text-right">操作</TableHead>
             </TableRow>
@@ -141,13 +142,13 @@ export default function MerchantTable({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center">
+                <TableCell colSpan={11} className="h-24 text-center">
                   加载中...
                 </TableCell>
               </TableRow>
             ) : merchants.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center">
+                <TableCell colSpan={11} className="h-24 text-center">
                   没有找到商家数据
                 </TableCell>
               </TableRow>
@@ -166,6 +167,21 @@ export default function MerchantTable({
                   <TableCell className="py-1.5 px-2">
                     <div className="flex items-center">
                       {merchant.sendMessage ? (
+                        <div className="flex items-center text-green-600">
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          <span className="text-xs font-medium">是</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center text-red-500">
+                          <XCircle className="h-4 w-4 mr-1" />
+                          <span className="text-xs font-medium">否</span>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-1.5 px-2">
+                    <div className="flex items-center">
+                      {merchant.sendOrderScreenshot ? (
                         <div className="flex items-center text-green-600">
                           <CheckCircle2 className="h-4 w-4 mr-1" />
                           <span className="text-xs font-medium">是</span>

@@ -238,6 +238,12 @@ export class SqliteDatabase {
         console.log('Added pinduoduoShopId column to merchants table');
       }
 
+      // 添加 sendOrderScreenshot 列
+      if (!columnNames.includes('sendOrderScreenshot')) {
+        await this.db.exec(`ALTER TABLE merchants ADD COLUMN sendOrderScreenshot INTEGER DEFAULT 0`);
+        console.log('Added sendOrderScreenshot column to merchants table');
+      }
+
       // 检查 products 表的列
       const productColumns = await this.db.all('PRAGMA table_info(products)');
       const productColumnNames = productColumns.map((col: any) => col.name);
@@ -355,8 +361,8 @@ export class SqliteDatabase {
     const createdAt = new Date().toISOString();
 
     await this.db.run(
-      `INSERT INTO merchants (id, createdAt, name, merchantId, pinduoduoName, pinduoduoShopId, warehouse1, groupName, sendMessage, mentionList, subAccount, pinduoduoPassword, cookie)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO merchants (id, createdAt, name, merchantId, pinduoduoName, pinduoduoShopId, warehouse1, groupName, sendMessage, sendOrderScreenshot, mentionList, subAccount, pinduoduoPassword, cookie)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       createdAt,
       merchant.name,
@@ -366,6 +372,7 @@ export class SqliteDatabase {
       merchant.warehouse1,
       merchant.groupName,
       merchant.sendMessage ? 1 : 0,
+      merchant.sendOrderScreenshot ? 1 : 0,
       JSON.stringify(merchant.mentionList || []),
       merchant.subAccount || '',
       merchant.pinduoduoPassword || '',
@@ -536,6 +543,9 @@ export class SqliteDatabase {
     const values = fields.map(field => {
       if (field === 'sendMessage') {
         return updatedData.sendMessage ? 1 : 0;
+      }
+      if (field === 'sendOrderScreenshot') {
+        return updatedData.sendOrderScreenshot ? 1 : 0;
       }
       if (field === 'mentionList') {
         return JSON.stringify(updatedData.mentionList || []);
@@ -856,6 +866,7 @@ export class SqliteDatabase {
       warehouse1: row.warehouse1,
       groupName: row.groupName,
       sendMessage: !!row.sendMessage,
+      sendOrderScreenshot: !!row.sendOrderScreenshot,
       mentionList,
       subAccount: row.subAccount || '',
       pinduoduoPassword: row.pinduoduoPassword || '',
