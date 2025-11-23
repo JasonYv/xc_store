@@ -51,15 +51,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     );
 
+    // 调试日志：打印所有接收到的字段
+    console.log('=== 订单截图上传调试信息 ===');
+    console.log('接收到的 fields:', JSON.stringify(fields, null, 2));
+    console.log('接收到的 files:', Object.keys(files));
+    console.log('fields.merchantId 类型:', typeof fields.merchantId);
+    console.log('fields.merchantId 值:', fields.merchantId);
+
     // 获取商家ID
     const merchantId = Array.isArray(fields.merchantId)
       ? fields.merchantId[0]
       : fields.merchantId;
 
+    console.log('解析后的 merchantId:', merchantId);
+    console.log('========================');
+
     if (!merchantId) {
       return res.status(400).json({
         success: false,
-        message: '缺少商家ID参数'
+        message: '缺少商家ID参数',
+        debug: {
+          receivedFields: fields,
+          fieldKeys: Object.keys(fields)
+        }
       });
     }
 
