@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import formidable, { File } from 'formidable';
 import path from 'path';
+import fs from 'fs';
 import db from '@/lib/sqlite-db';
 
 // 禁用Next.js默认的body解析,使用formidable处理
@@ -14,6 +15,24 @@ export const config = {
 const WORKTOOL_API_URL = 'https://api.worktool.ymdyes.cn/wework/sendRawMessage';
 const ROBOT_ID = 'wtr89taerr32z8miwin31fabnzdkzn83';
 
+// 辅助函数：安全提取字段值
+function extractFieldValue(field: string | string[] | undefined): string | undefined {
+  if (!field) return undefined;
+  if (Array.isArray(field)) {
+    return field[0] || undefined;
+  }
+  return field;
+}
+
+// 辅助函数：安全提取文件对象
+function extractFile(file: File | File[] | undefined): File | undefined {
+  if (!file) return undefined;
+  if (Array.isArray(file)) {
+    return file[0] || undefined;
+  }
+  return file;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await db.init();
   await db.migrateFromJson();
@@ -25,9 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
+  let tempFilePath: string | null = null;
+
   try {
     // 使用临时目录先保存文件
-    const fs = require('fs');
     const tempUploadDir = path.join(process.cwd(), 'public/uploads/order-screenshots', 'temp');
 
     // 确保临时目录存在
@@ -35,77 +55,96 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       fs.mkdirSync(tempUploadDir, { recursive: true });
     }
 
-    // 解析表单
+    // 配置formidable
     const form = formidable({
       uploadDir: tempUploadDir,
       keepExtensions: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB
+      multiples: false,
+      filename: (_name, ext) => {
+        // 生成唯一文件名
+        return `temp_${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
+      }
     });
 
-    const [fields, files] = await new Promise<[formidable.Fields, formidable.Files]>(
-      (resolve, reject) => {
+    // 解析表单数据
+    const parseForm = (): Promise<{ fields: formidable.Fields; files: formidable.Files }> => {
+      return new Promise((resolve, reject) => {
         form.parse(req, (err, fields, files) => {
-          if (err) reject(err);
-          else resolve([fields, files]);
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ fields, files });
+          }
         });
-      }
-    );
+      });
+    };
 
-    // 调试日志：打印所有接收到的字段
-    console.log('=== 订单截图上传调试信息 ===');
-    console.log('接收到的 fields:', JSON.stringify(fields, null, 2));
-    console.log('接收到的 files:', Object.keys(files));
-    console.log('fields.merchantId 类型:', typeof fields.merchantId);
-    console.log('fields.merchantId 值:', fields.merchantId);
+    const { fields, files } = await parseForm();
 
-    // 获取商家ID
-    const merchantId = Array.isArray(fields.merchantId)
-      ? fields.merchantId[0]
-      : fields.merchantId;
+    // 提取商家ID（同时支持 merchantId 和 merchant_id）
+    // 先从 fields 中提取
+    let merchantId = extractFieldValue(fields.merchantId) || extractFieldValue(fields.merchant_id);
 
-    console.log('解析后的 merchantId:', merchantId);
-    console.log('========================');
-
+    // 如果 fields 中没有，尝试从 files 中读取（有些客户端会把文本字段也放在 files 中）
     if (!merchantId) {
+      const merchantIdFile = extractFile(files.merchantId) || extractFile(files.merchant_id);
+      if (merchantIdFile && merchantIdFile.mimetype?.includes('text')) {
+        // 读取文件内容作为 merchantId
+        try {
+          merchantId = fs.readFileSync(merchantIdFile.filepath, 'utf-8').trim();
+          // 删除临时文件
+          fs.unlinkSync(merchantIdFile.filepath);
+        } catch (err) {
+          console.error('读取 merchantId 文件失败:', err);
+        }
+      }
+    }
+
+    // 验证商家ID
+    if (!merchantId || merchantId.trim() === '') {
       return res.status(400).json({
         success: false,
-        message: '缺少商家ID参数',
+        message: '缺少或无效的商家ID参数 (merchantId 或 merchant_id)',
         debug: {
-          receivedFields: fields,
-          fieldKeys: Object.keys(fields)
+          receivedFieldNames: Object.keys(fields),
+          merchantIdRaw: fields.merchantId,
+          merchant_idRaw: fields.merchant_id,
+          merchantIdExtracted: merchantId
         }
       });
     }
 
-    // 获取上传的文件
-    const uploadedFile = files.screenshot;
+    // 提取文件
+    const uploadedFile = extractFile(files.screenshot);
+
     if (!uploadedFile) {
       return res.status(400).json({
         success: false,
-        message: '缺少截图文件'
+        message: '缺少截图文件 (screenshot)',
+        debug: {
+          receivedFileNames: Object.keys(files)
+        }
       });
     }
 
-    const tempFile: File = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile;
+    // 保存临时文件路径，用于错误时清理
+    tempFilePath = uploadedFile.filepath;
 
     // 查询商家信息
     const merchant = await db.getMerchantById(merchantId);
     if (!merchant) {
-      // 删除临时文件
-      fs.unlinkSync(tempFile.filepath);
       return res.status(404).json({
         success: false,
-        message: '商家不存在'
+        message: `商家不存在 (ID: ${merchantId})`
       });
     }
 
     // 检查商家是否启用了发送订单截图
     if (!merchant.sendOrderScreenshot) {
-      // 删除临时文件
-      fs.unlinkSync(tempFile.filepath);
       return res.status(400).json({
         success: false,
-        message: '该商家未启用发送订单截图功能'
+        message: `商家 "${merchant.name}" 未启用发送订单截图功能`
       });
     }
 
@@ -133,7 +172,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 移动文件到目标位置
     const targetFilePath = path.join(dateFolderPath, fileName);
-    fs.renameSync(tempFile.filepath, targetFilePath);
+
+    // 如果目标文件已存在，删除它
+    if (fs.existsSync(targetFilePath)) {
+      fs.unlinkSync(targetFilePath);
+    }
+
+    fs.renameSync(uploadedFile.filepath, targetFilePath);
+    tempFilePath = null; // 文件已成功移动，清空临时路径
 
     // 生成可访问的图片URL: /uploads/order-screenshots/商家ID/yyyyMMdd/HHmm.jpg
     const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
@@ -147,7 +193,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         {
           type: 218,
           titleList: [merchant.groupName],
-          objectName: tempFile.originalFilename || fileName,
+          objectName: uploadedFile.originalFilename || fileName,
           fileUrl: imageUrl,
           fileType: 'image',
           extraText: `${merchant.name} - 订单截图`
@@ -191,9 +237,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('处理订单截图上传失败:', error);
+
+    // 清理临时文件
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        console.error('清理临时文件失败:', cleanupError);
+      }
+    }
+
     return res.status(500).json({
       success: false,
-      message: error instanceof Error ? error.message : '服务器内部错误'
+      message: error instanceof Error ? error.message : '服务器内部错误',
+      error: error instanceof Error ? error.stack : String(error)
     });
   }
 }

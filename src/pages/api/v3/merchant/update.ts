@@ -24,7 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { id, merchantId, pinduoduoShopId, pinduoduoName } = req.body;
+    const { id, pinduoduoShopId, pinduoduoName } = req.body;
+    console.log('接收到的请求体:', req.body);
 
     // 验证必填参数（系统商家ID）
     if (!id) {
@@ -46,23 +47,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 构建更新数据（只更新提供的字段）
     const updateData: { [key: string]: any } = {};
 
-    if (merchantId !== undefined) {
-      updateData.merchantId = merchantId;
-    }
-
     if (pinduoduoShopId !== undefined) {
       updateData.pinduoduoShopId = pinduoduoShopId;
+      console.log('更新 pinduoduoShopId:', pinduoduoShopId);
     }
 
     if (pinduoduoName !== undefined) {
       updateData.pinduoduoName = pinduoduoName;
+      console.log('更新 pinduoduoName:', pinduoduoName);
     }
+
+    console.log('最终更新数据:', updateData);
 
     // 检查是否有字段需要更新
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({
         success: false,
-        message: '没有需要更新的字段 (merchantId, pinduoduoShopId, pinduoduoName)'
+        message: '没有需要更新的字段 (pinduoduoShopId, pinduoduoName)'
       });
     }
 
@@ -82,7 +83,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       data: {
         id: updatedMerchant.id,
         name: updatedMerchant.name,
-        merchantId: updatedMerchant.merchantId,
         pinduoduoShopId: updatedMerchant.pinduoduoShopId,
         pinduoduoName: updatedMerchant.pinduoduoName
       }

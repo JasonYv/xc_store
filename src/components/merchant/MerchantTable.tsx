@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, XCircle, MoreVertical, Edit, Copy, Star, Trash2, MessageSquare } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, XCircle, MoreVertical, Edit, Trash2, MessageSquare } from "lucide-react";
 import { Merchant } from '@/lib/types';
 
 interface MerchantTableProps {
@@ -106,6 +106,7 @@ export default function MerchantTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
+              <TableHead className="font-medium h-9 py-1 px-2">ID</TableHead>
               <TableHead className="font-medium h-9 py-1 px-2">
                 <Button
                   variant="ghost"
@@ -117,8 +118,8 @@ export default function MerchantTable({
                   {getSortIcon("name")}
                 </Button>
               </TableHead>
-              <TableHead className="font-medium h-9 py-1 px-2">多多买菜店铺ID</TableHead>
-              <TableHead className="font-medium h-9 py-1 px-2">多多买菜店铺名称</TableHead>
+              <TableHead className="font-medium h-9 py-1 px-2">拼多多店铺ID</TableHead>
+              <TableHead className="font-medium h-9 py-1 px-2">拼多多店铺名称</TableHead>
               <TableHead className="font-medium h-9 py-1 px-2">子账号</TableHead>
               <TableHead className="font-medium h-9 py-1 px-2">多多密码</TableHead>
               <TableHead className="font-medium h-9 py-1 px-2">仓库名称</TableHead>
@@ -142,21 +143,22 @@ export default function MerchantTable({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={11} className="h-24 text-center">
+                <TableCell colSpan={12} className="h-24 text-center">
                   加载中...
                 </TableCell>
               </TableRow>
             ) : merchants.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="h-24 text-center">
+                <TableCell colSpan={12} className="h-24 text-center">
                   没有找到商家数据
                 </TableCell>
               </TableRow>
             ) : (
               merchants.map((merchant: Merchant) => (
                 <TableRow key={merchant.id} className="hover:bg-muted/50">
+                  <TableCell className="py-1.5 px-2 text-muted-foreground text-xs font-mono">{merchant.id}</TableCell>
                   <TableCell className="font-medium py-1.5 px-2">{merchant.name}</TableCell>
-                  <TableCell className="py-1.5 px-2 text-muted-foreground text-sm">{merchant.merchantId || '-'}</TableCell>
+                  <TableCell className="py-1.5 px-2 text-muted-foreground text-sm">{merchant.pinduoduoShopId || '-'}</TableCell>
                   <TableCell className="py-1.5 px-2">{merchant.pinduoduoName || '-'}</TableCell>
                   <TableCell className="py-1.5 px-2">{merchant.subAccount || '-'}</TableCell>
                   <TableCell className="py-1.5 px-2">
