@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await db.migrateFromJson();
 
     const data = req.body;
-
+    console.log(`prod body`,data)
     // 验证所有必需字段是否存在
     const missingFields: string[] = [];
     for (const field of REQUIRED_FIELDS) {
