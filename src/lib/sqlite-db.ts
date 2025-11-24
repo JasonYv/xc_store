@@ -124,7 +124,6 @@ export class SqliteDatabase {
       await this.migrateAddColumns();
 
       this.initialized = true;
-      console.log('SQLite database initialized successfully');
     } catch (error) {
       console.error('Error initializing SQLite database:', error);
       throw error;
@@ -150,8 +149,6 @@ export class SqliteDatabase {
         setting.updatedAt
       );
     }
-
-    console.log('Default settings created');
   }
 
   // 创建默认管理员账号
@@ -178,8 +175,6 @@ export class SqliteDatabase {
       defaultAdmin.createdAt,
       defaultAdmin.isActive
     );
-
-    console.log('Default admin account created');
   }
 
   // 哈希密码
@@ -199,49 +194,41 @@ export class SqliteDatabase {
       // 添加 merchantId 列
       if (!columnNames.includes('merchantId')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN merchantId TEXT NOT NULL DEFAULT ''`);
-        console.log('Added merchantId column to merchants table');
       }
 
       // 添加 pinduoduoName 列
       if (!columnNames.includes('pinduoduoName')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN pinduoduoName TEXT NOT NULL DEFAULT ''`);
-        console.log('Added pinduoduoName column to merchants table');
       }
 
       // 添加 mentionList 列
       if (!columnNames.includes('mentionList')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN mentionList TEXT DEFAULT '[]'`);
-        console.log('Added mentionList column to merchants table');
       }
 
       // 添加 subAccount 列
       if (!columnNames.includes('subAccount')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN subAccount TEXT NOT NULL DEFAULT ''`);
-        console.log('Added subAccount column to merchants table');
       }
 
       // 添加 pinduoduoPassword 列
       if (!columnNames.includes('pinduoduoPassword')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN pinduoduoPassword TEXT NOT NULL DEFAULT ''`);
-        console.log('Added pinduoduoPassword column to merchants table');
       }
 
       // 添加 cookie 列
       if (!columnNames.includes('cookie')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN cookie TEXT NOT NULL DEFAULT ''`);
-        console.log('Added cookie column to merchants table');
       }
 
       // 添加 pinduoduoShopId 列
       if (!columnNames.includes('pinduoduoShopId')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN pinduoduoShopId TEXT NOT NULL DEFAULT ''`);
-        console.log('Added pinduoduoShopId column to merchants table');
       }
 
       // 添加 sendOrderScreenshot 列
       if (!columnNames.includes('sendOrderScreenshot')) {
         await this.db.exec(`ALTER TABLE merchants ADD COLUMN sendOrderScreenshot INTEGER DEFAULT 0`);
-        console.log('Added sendOrderScreenshot column to merchants table');
       }
 
       // 检查 products 表的列
@@ -251,7 +238,6 @@ export class SqliteDatabase {
       // 添加 productSpec 列到 products 表
       if (!productColumnNames.includes('productSpec')) {
         await this.db.exec(`ALTER TABLE products ADD COLUMN productSpec TEXT NOT NULL DEFAULT ''`);
-        console.log('Added productSpec column to products table');
       }
     } catch (error) {
       console.error('Error migrating columns:', error);
@@ -289,7 +275,6 @@ export class SqliteDatabase {
 
     const jsonPath = path.join(process.cwd(), 'data/merchants.json');
     if (!fs.existsSync(jsonPath)) {
-      console.log('JSON文件不存在，无需迁移');
       return;
     }
 
@@ -303,7 +288,6 @@ export class SqliteDatabase {
       // 检查表是否为空
       const count = await this.db.get('SELECT COUNT(*) as count FROM merchants');
       if (count.count > 0) {
-        console.log('SQLite数据库已有数据，跳过迁移');
         await this.db.exec('COMMIT');
         return;
       }
@@ -340,7 +324,6 @@ export class SqliteDatabase {
       );
 
       await this.db.exec('COMMIT');
-      console.log(`成功迁移 ${merchants.length} 条商家记录，从JSON到SQLite`);
     } catch (error) {
       if (this.db) {
         await this.db.exec('ROLLBACK');
