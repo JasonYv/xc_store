@@ -34,9 +34,9 @@ export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
             <TableHead className="w-[80px]">订单ID</TableHead>
             <TableHead>店铺名称</TableHead>
             <TableHead>商品名称</TableHead>
-            <TableHead>销售区域</TableHead>
-            <TableHead>仓库信息</TableHead>
+            <TableHead>区域-仓库</TableHead>
             <TableHead>销售日期</TableHead>
+            <TableHead className="text-right">预估销量</TableHead>
             <TableHead className="text-right">销售数量</TableHead>
             <TableHead className="text-right">总库存</TableHead>
             <TableHead>创建时间</TableHead>
@@ -51,9 +51,13 @@ export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
               <TableCell className="text-sm max-w-[200px] truncate" title={order.productName}>
                 {order.productName}
               </TableCell>
-              <TableCell className="text-sm">{order.salesArea}</TableCell>
-              <TableCell className="text-sm">{order.warehouseInfo}</TableCell>
+              <TableCell className="text-sm">
+                {order.salesArea} - {order.warehouseInfo}
+              </TableCell>
               <TableCell className="text-sm">{order.salesDate}</TableCell>
+              <TableCell className="text-right text-sm text-blue-600">
+                {order.estimatedSales}
+              </TableCell>
               <TableCell className="text-right text-sm font-medium">
                 {order.salesQuantity}
               </TableCell>
