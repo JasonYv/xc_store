@@ -1175,6 +1175,104 @@ export class SqliteDatabase {
     return row ? this.rowToProductSalesOrder(row) : null;
   }
 
+  // 根据店铺ID、商品ID和销售日期查询订单（唯一性查询）
+  async getProductSalesOrderByUniqueKey(
+    shopId: string,
+    productId: string,
+    salesDate: string
+  ): Promise<ProductSalesOrder | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM product_sales_orders WHERE shopId = ? AND productId = ? AND salesDate = ?',
+      shopId,
+      productId,
+      salesDate
+    );
+
+    return row ? this.rowToProductSalesOrder(row) : null;
+  }
+
+  // 更新订单
+  async updateProductSalesOrder(
+    id: string,
+    orderData: Partial<Omit<ProductSalesOrder, 'id' | 'createdAt'>>
+  ): Promise<ProductSalesOrder | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 先检查订单是否存在
+    const existingOrder = await this.getProductSalesOrderById(id);
+    if (!existingOrder) return null;
+
+    // 构建UPDATE语句
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (orderData.shopName !== undefined) {
+      fields.push('shopName = ?');
+      values.push(orderData.shopName);
+    }
+    if (orderData.shopId !== undefined) {
+      fields.push('shopId = ?');
+      values.push(orderData.shopId);
+    }
+    if (orderData.productId !== undefined) {
+      fields.push('productId = ?');
+      values.push(orderData.productId);
+    }
+    if (orderData.productName !== undefined) {
+      fields.push('productName = ?');
+      values.push(orderData.productName);
+    }
+    if (orderData.productImage !== undefined) {
+      fields.push('productImage = ?');
+      values.push(orderData.productImage || '');
+    }
+    if (orderData.salesArea !== undefined) {
+      fields.push('salesArea = ?');
+      values.push(orderData.salesArea);
+    }
+    if (orderData.warehouseInfo !== undefined) {
+      fields.push('warehouseInfo = ?');
+      values.push(orderData.warehouseInfo);
+    }
+    if (orderData.salesDate !== undefined) {
+      fields.push('salesDate = ?');
+      values.push(orderData.salesDate);
+    }
+    if (orderData.salesSpec !== undefined) {
+      fields.push('salesSpec = ?');
+      values.push(orderData.salesSpec);
+    }
+    if (orderData.totalStock !== undefined) {
+      fields.push('totalStock = ?');
+      values.push(orderData.totalStock);
+    }
+    if (orderData.estimatedSales !== undefined) {
+      fields.push('estimatedSales = ?');
+      values.push(orderData.estimatedSales);
+    }
+    if (orderData.totalSales !== undefined) {
+      fields.push('totalSales = ?');
+      values.push(orderData.totalSales);
+    }
+    if (orderData.salesQuantity !== undefined) {
+      fields.push('salesQuantity = ?');
+      values.push(orderData.salesQuantity);
+    }
+
+    if (fields.length === 0) return existingOrder;
+
+    values.push(id);
+
+    await this.db.run(
+      `UPDATE product_sales_orders SET ${fields.join(', ')} WHERE id = ?`,
+      ...values
+    );
+
+    return this.getProductSalesOrderById(id);
+  }
+
   private rowToProductSalesOrder(row: any): ProductSalesOrder {
     return {
       id: row.id.toString(),

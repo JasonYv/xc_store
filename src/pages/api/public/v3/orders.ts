@@ -76,8 +76,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log(`Merchant not found for shop_name: ${shopName}`);
     }
 
-    // 插入数据到数据库
-    const order = await db.insertProductSalesOrder({
+    // 准备订单数据
+    const orderData = {
       shopName: String(data.shop_name),
       shopId: String(data.shop_id),
       productId: String(data.product_id),
@@ -91,14 +91,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       estimatedSales: Number(data.estimated_sales),
       totalSales: Number(data.total_sales),
       salesQuantity: Number(data.sales_quantity)
-    });
+    };
+
+    // 检查是否已存在相同的订单（根据 shopId + productId + salesDate）
+    const existingOrder = await db.getProductSalesOrderByUniqueKey(
+      orderData.shopId,
+      orderData.productId,
+      orderData.salesDate
+    );
+
+    let order;
+    let isUpdate = false;
+
+    if (existingOrder) {
+      // 如果订单已存在，更新数据
+      order = await db.updateProductSalesOrder(existingOrder.id, orderData);
+      isUpdate = true;
+    } else {
+      // 如果订单不存在，插入新订单
+      order = await db.insertProductSalesOrder(orderData);
+      isUpdate = false;
+    }
 
     return res.status(200).json({
       success: true,
-      message: '订单数据保存成功',
+      message: isUpdate ? '订单数据已更新' : '订单数据已创建',
       data: {
-        id: order.id,
-        createdAt: order.createdAt
+        id: order!.id,
+        createdAt: order!.createdAt,
+        isUpdate
       }
     });
 
