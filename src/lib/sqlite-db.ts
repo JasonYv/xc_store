@@ -280,7 +280,7 @@ export class SqliteDatabase {
       );
 
       if (migrationRecord) {
-        console.log(`已经完成过迁移，时间: ${migrationRecord.migrated_at}`);
+        // 已完成迁移，跳过
         return;
       }
     } catch (error) {
