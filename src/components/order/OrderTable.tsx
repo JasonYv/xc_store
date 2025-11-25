@@ -10,7 +10,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Eye } from "lucide-react";
+import { Eye, AlertTriangle, AlertCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface OrderTableProps {
   orders: ProductSalesOrder[];
@@ -18,6 +24,16 @@ interface OrderTableProps {
 }
 
 export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
+  // 判断库存状态
+  const getStockStatus = (order: ProductSalesOrder) => {
+    if (order.totalStock < order.salesQuantity) {
+      return 'critical'; // 库存不足 - 红色警告
+    } else if (order.totalStock < order.estimatedSales) {
+      return 'warning'; // 库存偏低 - 黄色提示
+    }
+    return 'normal'; // 正常
+  };
+
   if (orders.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-lg border">
@@ -62,7 +78,43 @@ export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
                 {order.salesQuantity}
               </TableCell>
               <TableCell className="text-right text-sm">
-                {order.totalStock}
+                <TooltipProvider>
+                  <div className="flex items-center justify-end gap-1">
+                    {(() => {
+                      const status = getStockStatus(order);
+                      if (status === 'critical') {
+                        return (
+                          <>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertCircle className="h-4 w-4 text-red-500" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>库存不足: 总库存({order.totalStock}) &lt; 销售数量({order.salesQuantity})</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className="font-medium text-red-600">{order.totalStock}</span>
+                          </>
+                        );
+                      } else if (status === 'warning') {
+                        return (
+                          <>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>库存偏低: 总库存({order.totalStock}) &lt; 预估销量({order.estimatedSales})</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className="text-orange-600">{order.totalStock}</span>
+                          </>
+                        );
+                      }
+                      return <span>{order.totalStock}</span>;
+                    })()}
+                  </div>
+                </TooltipProvider>
               </TableCell>
               <TableCell className="text-sm text-gray-500">
                 {new Date(order.createdAt).toLocaleString('zh-CN', {
