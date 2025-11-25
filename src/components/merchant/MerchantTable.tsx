@@ -283,36 +283,74 @@ export default function MerchantTable({
                 />
               </PaginationItem>
 
-              {Array.from({ length: totalPages }).map((_, index) => {
-                // 显示当前页码前后的页码
-                const pageNumber = index + 1;
-                const shouldShow =
-                  pageNumber === 1 ||
-                  pageNumber === totalPages ||
-                  (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1);
+              {(() => {
+                const pages = [];
+                const showEllipsisStart = currentPage > 3;
+                const showEllipsisEnd = currentPage < totalPages - 2;
 
-                if (!shouldShow) {
-                  if (pageNumber === 2 || pageNumber === totalPages - 1) {
-                    return (
-                      <PaginationItem key={pageNumber}>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    );
-                  }
-                  return null;
-                }
-
-                return (
-                  <PaginationItem key={pageNumber}>
+                // 始终显示第一页
+                pages.push(
+                  <PaginationItem key={1}>
                     <PaginationLink
-                      onClick={() => onPageChange(pageNumber)}
-                      isActive={pageNumber === currentPage}
+                      onClick={() => onPageChange(1)}
+                      isActive={currentPage === 1}
                     >
-                      {pageNumber}
+                      1
                     </PaginationLink>
                   </PaginationItem>
                 );
-              })}
+
+                // 左侧省略号
+                if (showEllipsisStart) {
+                  pages.push(
+                    <PaginationItem key="ellipsis-start">
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  );
+                }
+
+                // 显示当前页前后的页码
+                const startPage = Math.max(2, currentPage - 1);
+                const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+                for (let i = startPage; i <= endPage; i++) {
+                  pages.push(
+                    <PaginationItem key={i}>
+                      <PaginationLink
+                        onClick={() => onPageChange(i)}
+                        isActive={currentPage === i}
+                      >
+                        {i}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                }
+
+                // 右侧省略号
+                if (showEllipsisEnd) {
+                  pages.push(
+                    <PaginationItem key="ellipsis-end">
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  );
+                }
+
+                // 始终显示最后一页
+                if (totalPages > 1) {
+                  pages.push(
+                    <PaginationItem key={totalPages}>
+                      <PaginationLink
+                        onClick={() => onPageChange(totalPages)}
+                        isActive={currentPage === totalPages}
+                      >
+                        {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                }
+
+                return pages;
+              })()}
 
               <PaginationItem>
                 <PaginationNext
