@@ -149,7 +149,7 @@ export default function MerchantForm({ merchant, onSubmit, onCancel }: MerchantF
         <label htmlFor="pinduoduoPassword" className="text-xs font-medium">多多密码</label>
         <Input
           id="pinduoduoPassword"
-          type="password"
+          type="text"
           value={formData.pinduoduoPassword}
           onChange={(e) => setFormData({ ...formData, pinduoduoPassword: e.target.value })}
           placeholder="选填"

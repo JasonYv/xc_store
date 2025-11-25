@@ -162,7 +162,7 @@ export default function MerchantTable({
                   <TableCell className="py-1.5 px-2">{merchant.pinduoduoName || '-'}</TableCell>
                   <TableCell className="py-1.5 px-2">{merchant.subAccount || '-'}</TableCell>
                   <TableCell className="py-1.5 px-2">
-                    {merchant.pinduoduoPassword ? '●●●●●●' : '-'}
+                    {merchant.pinduoduoPassword || '-'}
                   </TableCell>
                   <TableCell className="py-1.5 px-2">{merchant.warehouse1}</TableCell>
                   <TableCell className="py-1.5 px-2">{merchant.groupName}</TableCell>
