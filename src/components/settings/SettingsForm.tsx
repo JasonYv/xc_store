@@ -1,14 +1,68 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SettingsForm() {
   const [darkMode, setDarkMode] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [driverPhone, setDriverPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  // 加载设置
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch(`/api/settings?t=${Date.now()}`);
+        const data = await response.json();
+        if (response.ok && data.success) {
+          setDriverPhone(data.data.driverPhone || '');
+        }
+      } catch (error) {
+        console.error('加载设置失败:', error);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // 保存设置
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/settings?t=${Date.now()}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          driverPhone,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        toast({
+          title: "成功",
+          description: "设置已保存",
+        });
+      } else {
+        throw new Error(data.message || '保存设置失败');
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: error instanceof Error ? error.message : '保存设置失败',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -64,7 +118,20 @@ export default function SettingsForm() {
               />
               <p className="text-xs text-muted-foreground">留空表示不修改密码</p>
             </div>
-  
+
+            <div className="space-y-2">
+              <label htmlFor="driverPhone" className="text-sm font-medium">送货司机手机号</label>
+              <Input
+                id="driverPhone"
+                type="tel"
+                placeholder="请输入手机号"
+                value={driverPhone}
+                onChange={(e) => setDriverPhone(e.target.value)}
+                maxLength={11}
+              />
+              <p className="text-xs text-muted-foreground">用于送货通知和联系</p>
+            </div>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -85,8 +152,8 @@ export default function SettingsForm() {
           </div>
 
           <div className="flex justify-end">
-            <Button size="sm">
-              保存设置
+            <Button size="sm" onClick={handleSave} disabled={loading}>
+              {loading ? '保存中...' : '保存设置'}
             </Button>
           </div>
         </CardContent>
