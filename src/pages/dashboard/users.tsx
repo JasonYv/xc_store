@@ -9,7 +9,7 @@ import Modal from '@/components/common/Modal';
 import UserTable from '@/components/settings/UserTable';
 import UserForm from '@/components/settings/UserForm';
 import { User, UserFormData } from '@/lib/types';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 export default function UsersPage() {
   const router = useRouter();

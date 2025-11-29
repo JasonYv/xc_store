@@ -10,6 +10,7 @@ import SendMessageDialog from '@/components/merchant/SendMessageDialog';
 import Modal from '@/components/common/Modal';
 import Loading from '@/components/common/Loading';
 import { Merchant } from '@/lib/types';
+import { useToast } from "@/hooks/use-toast";
 
 // 保留useDisclosure钩子
 const useDisclosure = () => {
@@ -39,6 +40,7 @@ export default function MerchantsPage() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [editingMerchant, setEditingMerchant] = useState<Merchant | undefined>();
   const [sendMessageMerchant, setSendMessageMerchant] = useState<Merchant | null>(null);
+  const { toast } = useToast();
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     name: '',
     merchantId: '',
@@ -198,8 +200,17 @@ export default function MerchantsPage() {
       try {
         await fetch(`/api/merchants?id=${id}&t=${Date.now()}`, { method: 'DELETE' });
         fetchMerchants(currentPage, searchFilters, sortField, sortDirection);
+        toast({
+          title: "成功",
+          description: "商家已删除",
+        });
       } catch (error) {
         console.error('删除商家错误:', error);
+        toast({
+          variant: "destructive",
+          title: "错误",
+          description: "删除商家失败",
+        });
       }
     }
   };
@@ -251,8 +262,18 @@ export default function MerchantsPage() {
       await fetchMerchants(currentPage, searchFilters, sortField, sortDirection);
       onClose();
       setEditingMerchant(undefined);
+
+      toast({
+        title: "成功",
+        description: editingMerchant ? "商家信息已更新" : "商家已添加",
+      });
     } catch (error) {
       console.error('保存商家数据错误:', error);
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: error instanceof Error ? error.message : "保存商家失败",
+      });
     }
   };
 

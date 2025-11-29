@@ -1,12 +1,11 @@
 import '@/styles/globals.css'
 import type { AppProps } from 'next/app'
 import { useState, useEffect } from 'react'
-import { ToastProvider } from '@/components/ui/use-toast'
-import { Toaster } from '@/components/ui/toast'
+import { Toaster } from '@/components/ui/toaster'
 
 export default function App({ Component, pageProps }: AppProps) {
   const [mounted, setMounted] = useState(false);
-  
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -17,9 +16,9 @@ export default function App({ Component, pageProps }: AppProps) {
   }
 
   return (
-    <ToastProvider>
+    <>
       <Component {...pageProps} />
       <Toaster />
-    </ToastProvider>
+    </>
   );
 }

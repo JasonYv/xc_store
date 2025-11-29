@@ -196,7 +196,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           objectName: uploadedFile.originalFilename || fileName,
           fileUrl: imageUrl,
           fileType: 'image',
-          extraText: `${merchant.name} - 订单截图`
+          // extraText: `${merchant.name} - 订单截图`
         }
       ]
     };

@@ -9,6 +9,7 @@ import ProductSearch, { ProductSearchFilters } from '@/components/product/Produc
 import Modal from '@/components/common/Modal';
 import Loading from '@/components/common/Loading';
 import { Product } from '@/lib/types';
+import { useToast } from "@/hooks/use-toast";
 
 // useDisclosure钩子
 const useDisclosure = () => {
@@ -37,6 +38,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [editingProduct, setEditingProduct] = useState<Product | undefined>();
+  const { toast } = useToast();
   const [searchFilters, setSearchFilters] = useState<ProductSearchFilters>({
     productName: '',
     pinduoduoProductId: '',
@@ -190,8 +192,17 @@ export default function ProductsPage() {
       try {
         await fetch(`/api/products?id=${id}&t=${Date.now()}`, { method: 'DELETE' });
         fetchProducts(currentPage, searchFilters, sortField, sortDirection);
+        toast({
+          title: "成功",
+          description: "商品已删除",
+        });
       } catch (error) {
         console.error('删除商品错误:', error);
+        toast({
+          variant: "destructive",
+          title: "错误",
+          description: "删除商品失败",
+        });
       }
     }
   };
@@ -243,8 +254,18 @@ export default function ProductsPage() {
       await fetchProducts(currentPage, searchFilters, sortField, sortDirection);
       onClose();
       setEditingProduct(undefined);
+
+      toast({
+        title: "成功",
+        description: editingProduct ? "商品信息已更新" : "商品已添加",
+      });
     } catch (error) {
       console.error('保存商品数据错误:', error);
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: error instanceof Error ? error.message : "保存商品失败",
+      });
     }
   };
 
