@@ -61,20 +61,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // 根据店铺名称查找商家，并更新多多买菜店铺ID
-    const shopName = String(data.shop_name);
-    const shopId = String(data.shop_id);
+    // // 根据店铺名称查找商家，并更新多多买菜店铺ID
+    // const shopName = String(data.shop_name);
+    // const shopId = String(data.shop_id);
 
-    const merchant = await db.getMerchantByName(shopName);
-    if (merchant) {
-      // 如果商家存在，且店铺ID不同，则更新
-      if (merchant.pinduoduoShopId !== shopId) {
-        await db.updateMerchant(merchant.id, { pinduoduoShopId: shopId });
-        console.log(`Updated merchant ${shopName} with shopId: ${shopId}`);
-      }
-    } else {
-      console.log(`Merchant not found for shop_name: ${shopName}`);
-    }
+    // const merchant = await db.getMerchantByName(shopName);
+    // if (merchant) {
+    //   // 如果商家存在，且店铺ID不同，则更新
+    //   if (merchant.pinduoduoShopId !== shopId) {
+    //     await db.updateMerchant(merchant.id, { pinduoduoShopId: shopId });
+    //     console.log(`Updated merchant ${shopName} with shopId: ${shopId}`);
+    //   }
+    // } else {
+    //   console.log(`Merchant not found for shop_name: ${shopName}`);
+    // }
 
     // 准备订单数据
     const orderData = {
