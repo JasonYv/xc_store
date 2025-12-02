@@ -11,6 +11,7 @@ export default function SettingsForm() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
   const [driverPhone, setDriverPhone] = useState('');
+  const [henganDriverPhone, setHenganDriverPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -22,6 +23,7 @@ export default function SettingsForm() {
         const data = await response.json();
         if (response.ok && data.success) {
           setDriverPhone(data.data.driverPhone || '');
+          setHenganDriverPhone(data.data.henganDriverPhone || '');
         }
       } catch (error) {
         console.error('加载设置失败:', error);
@@ -41,6 +43,7 @@ export default function SettingsForm() {
         },
         body: JSON.stringify({
           driverPhone,
+          henganDriverPhone,
         }),
       });
 
@@ -130,6 +133,19 @@ export default function SettingsForm() {
                 maxLength={11}
               />
               <p className="text-xs text-muted-foreground">用于送货通知和联系</p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="henganDriverPhone" className="text-sm font-medium">恒安送货手机号</label>
+              <Input
+                id="henganDriverPhone"
+                type="tel"
+                placeholder="请输入手机号"
+                value={henganDriverPhone}
+                onChange={(e) => setHenganDriverPhone(e.target.value)}
+                maxLength={11}
+              />
+              <p className="text-xs text-muted-foreground">用于恒安送货通知和联系</p>
             </div>
 
             <div className="space-y-4">

@@ -28,20 +28,33 @@ export default async function handler(
   } else if (req.method === 'POST') {
     // 保存设置
     try {
-      const { driverPhone } = req.body;
+      const { driverPhone, henganDriverPhone } = req.body;
 
       // 验证手机号格式（可选）
       if (driverPhone && !/^1[3-9]\d{9}$/.test(driverPhone)) {
         return res.status(400).json({
           success: false,
           data: null as any,
-          error: '手机号格式不正确',
+          error: '送货司机手机号格式不正确',
+        });
+      }
+
+      if (henganDriverPhone && !/^1[3-9]\d{9}$/.test(henganDriverPhone)) {
+        return res.status(400).json({
+          success: false,
+          data: null as any,
+          error: '恒安送货手机号格式不正确',
         });
       }
 
       // 保存司机手机号
       if (driverPhone !== undefined) {
         await db.updateSetting('driverPhone', driverPhone);
+      }
+
+      // 保存恒安送货手机号
+      if (henganDriverPhone !== undefined) {
+        await db.updateSetting('henganDriverPhone', henganDriverPhone);
       }
 
       return res.status(200).json({
