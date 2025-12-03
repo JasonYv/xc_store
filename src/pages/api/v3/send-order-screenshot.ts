@@ -148,16 +148,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 生成目录和文件名: 商家ID/yyyyMMdd/HHmm.jpg
+    // 生成目录和文件名: 商家ID/yyyyMMdd/HHmmss.jpg
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
 
     const dateFolder = `${year}${month}${day}`; // yyyyMMdd
-    const fileName = `${hours}${minutes}.jpg`; // HHmm.jpg
+    const fileName = `${hours}${minutes}${seconds}.jpg`; // HHmmss.jpg
 
     // 创建商家目录和日期目录
     const merchantFolder = path.join(process.cwd(), 'public/uploads/order-screenshots', merchantId);
@@ -181,7 +182,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     fs.renameSync(uploadedFile.filepath, targetFilePath);
     tempFilePath = null; // 文件已成功移动，清空临时路径
 
-    // 生成可访问的图片URL: /uploads/order-screenshots/商家ID/yyyyMMdd/HHmm.jpg
+    // 生成可访问的图片URL: /uploads/order-screenshots/商家ID/yyyyMMdd/HHmmss.jpg
     const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
     const relativePath = `${merchantId}/${dateFolder}/${fileName}`;
     const imageUrl = `${baseUrl}/uploads/order-screenshots/${relativePath}`;
