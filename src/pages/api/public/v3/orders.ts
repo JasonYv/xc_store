@@ -1,6 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import db from '@/lib/sqlite-db';
 
+// WorkTool机器人配置
+const WORKTOOL_API_URL = 'https://api.worktool.ymdyes.cn/wework/sendRawMessage';
+const ROBOT_ID = 'wtr89taerr32z8miwin31fabnzdkzn83';
+
 // 定义必须存在的参数字段
 const REQUIRED_FIELDS = [
   'shop_name',        // 店铺名称
@@ -111,6 +115,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // 如果订单不存在，插入新订单
       order = await db.insertProductSalesOrder(orderData);
       isUpdate = false;
+    }
+
+    // 检查是否需要发送补货提醒 (23:05~23:50之间)
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const isRestockTime = (hour === 23 && minute >= 5 && minute <= 50);
+
+    if (isRestockTime) {
+      // 计算补货数量: 销售数量 - 总库存
+      const restockQuantity = orderData.salesQuantity - orderData.totalStock;
+
+      if (restockQuantity > 0) {
+        // 需要补货，查询商家信息
+        const merchant = await db.getMerchantByPinduoduoShopId(orderData.shopId);
+
+        if (merchant && merchant.groupName) {
+          // 发送补货提醒到企业微信群
+          const restockMessage = `【补货提醒】\n商品ID：${orderData.productId}\n商品名称：${orderData.productName}\n补货数量：${restockQuantity}`;
+
+          const robotPayload = {
+            socketType: 2,
+            list: [
+              {
+                type: 203,
+                titleList: [merchant.groupName],
+                receivedContent: restockMessage
+              }
+            ]
+          };
+
+          try {
+            const robotResponse = await fetch(`${WORKTOOL_API_URL}?robotId=${ROBOT_ID}&t=${Date.now()}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(robotPayload)
+            });
+
+            const robotResult = await robotResponse.json();
+            console.log('补货提醒发送结果:', robotResult);
+          } catch (sendError) {
+            console.error('发送补货提醒失败:', sendError);
+            // 不影响订单保存，仅记录错误
+          }
+        }
+      }
     }
 
     return res.status(200).json({
