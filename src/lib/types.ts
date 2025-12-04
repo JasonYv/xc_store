@@ -83,6 +83,7 @@ export interface ProductFormData {
 export interface ProductSalesOrder {
   id: string;
   createdAt: string;
+  updatedAt: string;         // 更新时间
   shopName: string;          // 店铺名称
   shopId: string;            // 店铺id
   productId: string;         // 商品id

@@ -64,7 +64,7 @@ export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
             <TableRow key={order.id}>
               <TableCell className="font-medium text-sm">{order.id}</TableCell>
               <TableCell className="text-sm">{order.shopName}</TableCell>
-              <TableCell className="text-sm max-w-[200px] truncate" title={order.productName}>
+              <TableCell className="text-sm max-w-[300px] truncate" title={order.productName}>
                 {order.productName}
               </TableCell>
               <TableCell className="text-sm">

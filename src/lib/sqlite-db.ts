@@ -239,6 +239,17 @@ export class SqliteDatabase {
       if (!productColumnNames.includes('productSpec')) {
         await this.db.exec(`ALTER TABLE products ADD COLUMN productSpec TEXT NOT NULL DEFAULT ''`);
       }
+
+      // 检查 product_sales_orders 表的列
+      const orderColumns = await this.db.all('PRAGMA table_info(product_sales_orders)');
+      const orderColumnNames = orderColumns.map((col: any) => col.name);
+
+      // 添加 updatedAt 列到 product_sales_orders 表
+      if (!orderColumnNames.includes('updatedAt')) {
+        await this.db.exec(`ALTER TABLE product_sales_orders ADD COLUMN updatedAt TEXT NOT NULL DEFAULT ''`);
+        // 为现有记录设置updatedAt为createdAt的值
+        await this.db.exec(`UPDATE product_sales_orders SET updatedAt = createdAt WHERE updatedAt = ''`);
+      }
     } catch (error) {
       console.error('Error migrating columns:', error);
     }
@@ -1064,18 +1075,19 @@ export class SqliteDatabase {
 
   // ==================== Product Sales Orders ====================
 
-  async insertProductSalesOrder(order: Omit<ProductSalesOrder, 'id' | 'createdAt'>): Promise<ProductSalesOrder> {
+  async insertProductSalesOrder(order: Omit<ProductSalesOrder, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProductSalesOrder> {
     if (!this.db) throw new Error('Database not initialized');
 
-    const createdAt = new Date().toISOString();
+    const now = new Date().toISOString();
 
     const result = await this.db.run(
       `INSERT INTO product_sales_orders (
-        createdAt, shopName, shopId, productId, productName, productImage,
+        createdAt, updatedAt, shopName, shopId, productId, productName, productImage,
         salesArea, warehouseInfo, salesDate, salesSpec,
         totalStock, estimatedSales, totalSales, salesQuantity
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      createdAt,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      now,
+      now,
       order.shopName,
       order.shopId,
       order.productId,
@@ -1095,7 +1107,8 @@ export class SqliteDatabase {
 
     return {
       id,
-      createdAt,
+      createdAt: now,
+      updatedAt: now,
       ...order
     };
   }
@@ -1196,7 +1209,7 @@ export class SqliteDatabase {
   // 更新订单
   async updateProductSalesOrder(
     id: string,
-    orderData: Partial<Omit<ProductSalesOrder, 'id' | 'createdAt'>>
+    orderData: Partial<Omit<ProductSalesOrder, 'id' | 'createdAt' | 'updatedAt'>>
   ): Promise<ProductSalesOrder | null> {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1207,6 +1220,10 @@ export class SqliteDatabase {
     // 构建UPDATE语句
     const fields: string[] = [];
     const values: any[] = [];
+
+    // 始终更新 updatedAt
+    fields.push('updatedAt = ?');
+    values.push(new Date().toISOString());
 
     if (orderData.shopName !== undefined) {
       fields.push('shopName = ?');
@@ -1277,6 +1294,7 @@ export class SqliteDatabase {
     return {
       id: row.id.toString(),
       createdAt: row.createdAt,
+      updatedAt: row.updatedAt || row.createdAt,
       shopName: row.shopName,
       shopId: row.shopId,
       productId: row.productId,
