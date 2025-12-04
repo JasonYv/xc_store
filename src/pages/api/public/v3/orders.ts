@@ -123,44 +123,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const minute = now.getMinutes();
     const isRestockTime = (hour === 23 && minute >= 5 && minute <= 50);
 
-    if (isRestockTime) {
-      // 计算补货数量: 销售数量 - 总库存
-      const restockQuantity = orderData.salesQuantity - orderData.totalStock;
+    // 计算补货数量
+    const restockQuantity = orderData.salesQuantity - orderData.totalStock;
+    const needsRestock = restockQuantity > 0;
 
-      if (restockQuantity > 0) {
-        // 需要补货，查询商家信息
-        const merchant = await db.getMerchantByPinduoduoShopId(orderData.shopId);
+    // 准备返回的补货信息
+    let restockInfo = null;
+    if (needsRestock) {
+      restockInfo = {
+        product_id: orderData.productId,
+        product_name: orderData.productName,
+        restock_quantity: restockQuantity
+      };
+    }
 
-        if (merchant && merchant.groupName) {
-          // 发送补货提醒到企业微信群
-          const restockMessage = `【补货提醒】\n商品ID：${orderData.productId}\n商品名称：${orderData.productName}\n补货数量：${restockQuantity}`;
+    if (isRestockTime && needsRestock) {
+      // 需要补货，查询商家信息
+      const merchant = await db.getMerchantByPinduoduoShopId(orderData.shopId);
 
-          const robotPayload = {
-            socketType: 2,
-            list: [
-              {
-                type: 203,
-                titleList: [merchant.groupName],
-                receivedContent: restockMessage
-              }
-            ]
-          };
+      if (merchant && merchant.groupName) {
+        // 发送补货提醒到企业微信群
+        const restockMessage = `【补货提醒】\n商品ID：${orderData.productId}\n商品名称：${orderData.productName}\n补货数量：${restockQuantity}`;
 
-          try {
-            const robotResponse = await fetch(`${WORKTOOL_API_URL}?robotId=${ROBOT_ID}&t=${Date.now()}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(robotPayload)
-            });
+        const robotPayload = {
+          socketType: 2,
+          list: [
+            {
+              type: 203,
+              titleList: [merchant.groupName],
+              receivedContent: restockMessage
+            }
+          ]
+        };
 
-            const robotResult = await robotResponse.json();
-            console.log('补货提醒发送结果:', robotResult);
-          } catch (sendError) {
-            console.error('发送补货提醒失败:', sendError);
-            // 不影响订单保存，仅记录错误
-          }
+        try {
+          const robotResponse = await fetch(`${WORKTOOL_API_URL}?robotId=${ROBOT_ID}&t=${Date.now()}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(robotPayload)
+          });
+
+          const robotResult = await robotResponse.json();
+          console.log('补货提醒发送结果:', robotResult);
+        } catch (sendError) {
+          console.error('发送补货提醒失败:', sendError);
+          // 不影响订单保存，仅记录错误
         }
       }
     }
@@ -171,7 +180,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       data: {
         id: order!.id,
         createdAt: order!.createdAt,
-        isUpdate
+        isUpdate,
+        restock: restockInfo
       }
     });
 
