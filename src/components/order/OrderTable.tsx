@@ -55,7 +55,6 @@ export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
             <TableHead className="text-right">预估销量</TableHead>
             <TableHead className="text-right">销售数量</TableHead>
             <TableHead className="text-right">总库存</TableHead>
-            <TableHead>创建时间</TableHead>
             <TableHead>更新时间</TableHead>
             <TableHead className="w-[100px] text-center">操作</TableHead>
           </TableRow>
@@ -116,15 +115,6 @@ export default function OrderTable({ orders, onViewDetail }: OrderTableProps) {
                     })()}
                   </div>
                 </TooltipProvider>
-              </TableCell>
-              <TableCell className="text-sm text-gray-500">
-                {new Date(order.createdAt).toLocaleString('zh-CN', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
               </TableCell>
               <TableCell className="text-sm text-gray-500">
                 {new Date(order.updatedAt).toLocaleString('zh-CN', {
