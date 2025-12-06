@@ -1296,16 +1296,25 @@ export class SqliteDatabase {
     return row ? this.rowToProductSalesOrder(row) : null;
   }
 
-  // 根据销售日期获取订单列表
-  async getProductSalesOrdersByDate(salesDate: string): Promise<ProductSalesOrder[]> {
+  // 根据销售日期获取订单列表(关联商家表获取商家名称)
+  async getProductSalesOrdersByDate(salesDate: string): Promise<(ProductSalesOrder & { merchantName: string })[]> {
     if (!this.db) throw new Error('Database not initialized');
 
     const rows = await this.db.all(
-      'SELECT * FROM product_sales_orders WHERE salesDate = ? ORDER BY createdAt DESC',
+      `SELECT
+        o.*,
+        COALESCE(m.name, '') as merchantName
+       FROM product_sales_orders o
+       LEFT JOIN merchants m ON o.shopId = m.pinduoduoShopId
+       WHERE o.salesDate = ?
+       ORDER BY o.createdAt DESC`,
       salesDate
     );
 
-    return rows.map(row => this.rowToProductSalesOrder(row));
+    return rows.map(row => ({
+      ...this.rowToProductSalesOrder(row),
+      merchantName: row.merchantName || ''
+    }));
   }
 
   // 更新订单
