@@ -87,7 +87,8 @@ export class SqliteDatabase {
           totalStock INTEGER NOT NULL DEFAULT 0,
           estimatedSales INTEGER NOT NULL DEFAULT 0,
           totalSales INTEGER NOT NULL DEFAULT 0,
-          salesQuantity INTEGER NOT NULL DEFAULT 0
+          salesQuantity INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(shopId, productId, salesDate)
         )
       `);
 
@@ -122,6 +123,9 @@ export class SqliteDatabase {
 
       // 数据库迁移：为现有表添加新列
       await this.migrateAddColumns();
+
+      // 数据库迁移：为订单表添加唯一索引
+      await this.migrateAddUniqueIndex();
 
       this.initialized = true;
     } catch (error) {
@@ -252,6 +256,92 @@ export class SqliteDatabase {
       }
     } catch (error) {
       console.error('Error migrating columns:', error);
+    }
+  }
+
+  // 迁移：为订单表添加唯一索引
+  private async migrateAddUniqueIndex() {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      // 检查索引是否已存在
+      const indexes = await this.db.all('PRAGMA index_list(product_sales_orders)');
+      const indexExists = indexes.some((idx: any) => idx.name === 'idx_unique_order');
+
+      if (!indexExists) {
+        // 在创建唯一索引之前,先清理重复数据
+        await this.cleanDuplicateOrders();
+
+        // 创建唯一索引
+        await this.db.exec(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_order
+          ON product_sales_orders(shopId, productId, salesDate)
+        `);
+        console.log('已为订单表添加唯一索引: (shopId, productId, salesDate)');
+      }
+    } catch (error) {
+      console.error('Error migrating unique index:', error);
+    }
+  }
+
+  // 清理重复的订单数据,保留最新的记录
+  private async cleanDuplicateOrders() {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      // 查找所有重复的订单组合
+      const duplicates = await this.db.all(`
+        SELECT shopId, productId, salesDate, COUNT(*) as count
+        FROM product_sales_orders
+        GROUP BY shopId, productId, salesDate
+        HAVING count > 1
+      `);
+
+      if (duplicates.length === 0) {
+        console.log('未发现重复的订单数据');
+        return;
+      }
+
+      console.log(`发现 ${duplicates.length} 组重复的订单数据,开始清理...`);
+
+      let totalDeleted = 0;
+
+      // 对每组重复数据,保留最新的(id最大的),删除其他的
+      for (const dup of duplicates) {
+        const { shopId, productId, salesDate } = dup;
+
+        // 获取这组重复数据的所有记录,按 id 降序排列
+        const records = await this.db.all(
+          `SELECT id FROM product_sales_orders
+           WHERE shopId = ? AND productId = ? AND salesDate = ?
+           ORDER BY id DESC`,
+          shopId,
+          productId,
+          salesDate
+        );
+
+        // 保留第一条(最新的),删除其余的
+        if (records.length > 1) {
+          const idsToDelete = records.slice(1).map((r: any) => r.id);
+
+          for (const idToDelete of idsToDelete) {
+            await this.db.run(
+              'DELETE FROM product_sales_orders WHERE id = ?',
+              idToDelete
+            );
+            totalDeleted++;
+          }
+
+          console.log(
+            `清理重复订单: shopId=${shopId}, productId=${productId}, salesDate=${salesDate}, 删除 ${idsToDelete.length} 条旧记录`
+          );
+        }
+      }
+
+      console.log(`清理完成,共删除 ${totalDeleted} 条重复记录`);
+    } catch (error) {
+      console.error('Error cleaning duplicate orders:', error);
+      throw error;
     }
   }
 
@@ -1204,6 +1294,18 @@ export class SqliteDatabase {
     );
 
     return row ? this.rowToProductSalesOrder(row) : null;
+  }
+
+  // 根据销售日期获取订单列表
+  async getProductSalesOrdersByDate(salesDate: string): Promise<ProductSalesOrder[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT * FROM product_sales_orders WHERE salesDate = ? ORDER BY createdAt DESC',
+      salesDate
+    );
+
+    return rows.map(row => this.rowToProductSalesOrder(row));
   }
 
   // 更新订单
