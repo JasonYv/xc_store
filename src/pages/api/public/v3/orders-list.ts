@@ -40,6 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 简化返回数据,只返回核心字段(包含商家名称和云仓商品名称)
     const simplifiedOrders = orders.map(order => ({
+      productId: order.productId,              // 多多买菜商品ID
       merchantName: order.merchantName,        // 商家名称(关联商家表)
       cloudProductName: order.cloudProductName,// 云仓商品名称(关联商品表)
       shopName: order.shopName,                // 店铺名称
