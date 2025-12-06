@@ -35,21 +35,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 根据日期查询订单列表(关联商家表)
+    // 根据日期查询订单列表(关联商家表和商品表)
     const orders = await db.getProductSalesOrdersByDate(date);
 
-    // 简化返回数据,只返回核心字段(包含商家名称)
+    // 简化返回数据,只返回核心字段(包含商家名称和云仓商品名称)
     const simplifiedOrders = orders.map(order => ({
-      merchantName: order.merchantName,    // 商家名称(关联查询)
-      shopName: order.shopName,            // 店铺名称
-      productName: order.productName,      // 商品名称
-      salesArea: order.salesArea,          // 销售区域
-      warehouseInfo: order.warehouseInfo,  // 仓库信息
-      salesSpec: order.salesSpec,          // 销售规格
-      totalStock: order.totalStock,        // 总库存
-      estimatedSales: order.estimatedSales,// 预估销售
-      totalSales: order.totalSales,        // 总销售
-      salesQuantity: order.salesQuantity   // 销售数量
+      merchantName: order.merchantName,        // 商家名称(关联商家表)
+      cloudProductName: order.cloudProductName,// 云仓商品名称(关联商品表)
+      shopName: order.shopName,                // 店铺名称
+      productName: order.productName,          // 多多买菜商品名称
+      salesArea: order.salesArea,              // 销售区域
+      warehouseInfo: order.warehouseInfo,      // 仓库信息
+      salesSpec: order.salesSpec,              // 销售规格
+      totalStock: order.totalStock,            // 总库存
+      estimatedSales: order.estimatedSales,    // 预估销售
+      totalSales: order.totalSales,            // 总销售
+      salesQuantity: order.salesQuantity       // 销售数量
     }));
 
     return res.status(200).json({

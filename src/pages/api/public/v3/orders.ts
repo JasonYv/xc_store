@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import db from '@/lib/sqlite-db';
+import { da } from 'date-fns/locale';
 
 // 定义必须存在的参数字段
 const REQUIRED_FIELDS = [
@@ -33,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await db.migrateFromJson();
 
     const data = req.body;
-
+    // console.log(`data`,data)
     // 验证所有必需字段是否存在
     const missingFields: string[] = [];
     for (const field of REQUIRED_FIELDS) {
@@ -61,20 +62,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // // 根据店铺名称查找商家，并更新多多买菜店铺ID
-    // const shopName = String(data.shop_name);
-    // const shopId = String(data.shop_id);
+    // 根据店铺ID查找商家
+    const shopId = String(data.shop_id);
+    const productId = String(data.product_id);
 
-    // const merchant = await db.getMerchantByName(shopName);
-    // if (merchant) {
-    //   // 如果商家存在，且店铺ID不同，则更新
-    //   if (merchant.pinduoduoShopId !== shopId) {
-    //     await db.updateMerchant(merchant.id, { pinduoduoShopId: shopId });
-    //     console.log(`Updated merchant ${shopName} with shopId: ${shopId}`);
-    //   }
-    // } else {
-    //   console.log(`Merchant not found for shop_name: ${shopName}`);
-    // }
+    const merchant = await db.getMerchantByPinduoduoShopId(shopId);
+
+    if (merchant) {
+      // 同步商品数据：查找商家的这个商品是否存在
+      const existingProduct = await db.getProductByPinduoduoIdAndShopId(productId, shopId);
+
+      const productData = {
+        pinduoduoProductId: String(data.product_id),
+        pinduoduoProductImage: String(data.product_image || ''),
+        productName: '', // 云仓商品名称暂时为空,需要后台手动设置
+        pinduoduoProductName: String(data.product_name),
+        productSpec: String(data.sales_spec),
+        merchantId: merchant.id
+      };
+
+      if (existingProduct) {
+        // 商品已存在,更新商品信息
+        await db.updateProduct(existingProduct.id, {
+          pinduoduoProductImage: productData.pinduoduoProductImage,
+          pinduoduoProductName: productData.pinduoduoProductName,
+          productSpec: productData.productSpec
+        });
+        console.log(`更新商品: productId=${productId}, merchant=${merchant.name}`);
+      } else {
+        // 商品不存在,新增商品
+        await db.insertProduct(productData);
+        console.log(`新增商品: productId=${productId}, merchant=${merchant.name}`);
+      }
+    } else {
+      console.log(`未找到店铺ID为 ${shopId} 的商家`);
+    }
 
     // 准备订单数据
     const orderData = {

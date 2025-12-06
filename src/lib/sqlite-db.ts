@@ -1296,16 +1296,18 @@ export class SqliteDatabase {
     return row ? this.rowToProductSalesOrder(row) : null;
   }
 
-  // 根据销售日期获取订单列表(关联商家表获取商家名称)
-  async getProductSalesOrdersByDate(salesDate: string): Promise<(ProductSalesOrder & { merchantName: string })[]> {
+  // 根据销售日期获取订单列表(关联商家表和商品表)
+  async getProductSalesOrdersByDate(salesDate: string): Promise<(ProductSalesOrder & { merchantName: string; cloudProductName: string })[]> {
     if (!this.db) throw new Error('Database not initialized');
 
     const rows = await this.db.all(
       `SELECT
         o.*,
-        COALESCE(m.name, '') as merchantName
+        COALESCE(m.name, '') as merchantName,
+        COALESCE(p.productName, '') as cloudProductName
        FROM product_sales_orders o
        LEFT JOIN merchants m ON o.shopId = m.pinduoduoShopId
+       LEFT JOIN products p ON o.productId = p.pinduoduoProductId AND m.id = p.merchantId
        WHERE o.salesDate = ?
        ORDER BY o.createdAt DESC`,
       salesDate
@@ -1313,7 +1315,8 @@ export class SqliteDatabase {
 
     return rows.map(row => ({
       ...this.rowToProductSalesOrder(row),
-      merchantName: row.merchantName || ''
+      merchantName: row.merchantName || '',
+      cloudProductName: row.cloudProductName || ''
     }));
   }
 
