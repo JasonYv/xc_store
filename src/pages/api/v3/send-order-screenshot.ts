@@ -44,6 +44,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
+  // return res.status(200).json({
+  //     success: true,
+  //     message: '订单截图已成功发送',
+  //     data: {
+  //     }
+  //   });
+
   let tempFilePath: string | null = null;
 
   try {
