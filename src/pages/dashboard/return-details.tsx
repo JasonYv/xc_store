@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Button } from "@/components/ui/button";
-import { Plus, PackageX, Calendar, Upload, X } from "lucide-react";
+import { Plus, PackageX, Calendar, Upload, X, AlertTriangle } from "lucide-react";
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Modal from '@/components/common/Modal';
 import { ReturnDetail, ReturnDetailFormData, DataTypes } from '@/lib/types';
@@ -35,6 +35,8 @@ export default function ReturnDetailsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<ReturnDetail | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isClearingToday, setIsClearingToday] = useState(false);
 
   // 批量导入相关
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
@@ -66,6 +68,9 @@ export default function ReturnDetailsPage() {
       router.push('/');
     } else {
       setIsAuthenticated(true);
+      // 检查是否是admin账号
+      const username = localStorage.getItem('username');
+      setIsAdmin(username === 'admin');
       fetchReturnDetails();
     }
   }, [router]);
@@ -371,6 +376,44 @@ export default function ReturnDetailsPage() {
     }
   };
 
+  // 清空当日数据 (仅admin可用)
+  const handleClearTodayData = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (!confirm(`确定要清空今天 (${today}) 的所有余货/客退数据吗？此操作不可恢复！`)) {
+      return;
+    }
+    // 二次确认
+    if (!confirm('再次确认：清空后数据将无法恢复，是否继续？')) {
+      return;
+    }
+
+    setIsClearingToday(true);
+    try {
+      const response = await fetch(`/api/return-details?clearDate=${today}&t=${Date.now()}`, {
+        method: 'DELETE'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: "清空成功",
+          description: `已清空 ${today} 的 ${data.data.deletedCount || 0} 条余货/客退记录`,
+        });
+        fetchReturnDetails();
+      } else {
+        throw new Error(data.error || '清空失败');
+      }
+    } catch (error: any) {
+      toast({
+        title: "清空失败",
+        description: error.message || '清空当日数据失败，请稍后再试',
+        variant: "destructive",
+      });
+    } finally {
+      setIsClearingToday(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return null;
   }
@@ -393,6 +436,16 @@ export default function ReturnDetailsPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            {isAdmin && (
+              <Button
+                variant="destructive"
+                onClick={handleClearTodayData}
+                disabled={isClearingToday}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                {isClearingToday ? '清空中...' : '清空当日数据'}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => { setImportType('surplus'); setIsBatchModalOpen(true); }}>
               <Upload className="mr-2 h-4 w-4" /> 导入余货记录
             </Button>

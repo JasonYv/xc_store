@@ -40,10 +40,9 @@ const fieldLabelMap: Record<string, string> = {
   unit: '单位',
   dispatchQuantity: '派单数量',
   estimatedSales: '预估销售',
-  surplusQuantity: '余货数量',
+  surplusQuantity: '昨日余货',
   distributionStatus: '配货状态',
   warehousingStatus: '入库状态',
-  dataType: '数据类型',
   entryUser: '录入人',
   deliveryDate: '日期',
 };
@@ -52,7 +51,7 @@ const fieldLabelMap: Record<string, string> = {
 function getChanges(oldData: any, newData: any): { fieldName: string; oldValue: string; newValue: string }[] {
   const changes: { fieldName: string; oldValue: string; newValue: string }[] = [];
   const fields = ['merchantName', 'productName', 'unit', 'dispatchQuantity', 'estimatedSales', 'surplusQuantity',
-                  'distributionStatus', 'warehousingStatus', 'dataType', 'entryUser', 'deliveryDate'];
+                  'distributionStatus', 'warehousingStatus', 'entryUser', 'deliveryDate'];
 
   for (const field of fields) {
     if (newData[field] !== undefined && String(oldData[field]) !== String(newData[field])) {
@@ -79,7 +78,7 @@ export default async function handler(
   try {
     switch (method) {
       case 'GET': {
-        const { page = '1', pageSize = '10', merchantName, productName, deliveryDate, distributionStatus, warehousingStatus, dataType } = req.query;
+        const { page = '1', pageSize = '10', merchantName, productName, deliveryDate, distributionStatus, warehousingStatus } = req.query;
 
         const filters: any = {};
         if (merchantName) filters.merchantName = merchantName as string;
@@ -87,7 +86,6 @@ export default async function handler(
         if (deliveryDate) filters.deliveryDate = deliveryDate as string;
         if (distributionStatus !== undefined && distributionStatus !== '') filters.distributionStatus = parseInt(distributionStatus as string);
         if (warehousingStatus !== undefined && warehousingStatus !== '') filters.warehousingStatus = parseInt(warehousingStatus as string);
-        if (dataType !== undefined && dataType !== '') filters.dataType = parseInt(dataType as string);
 
         const result = await db.getDailyDeliveriesPaginated(
           parseInt(page as string),
@@ -127,7 +125,6 @@ export default async function handler(
           surplusQuantity: deliveryData.surplusQuantity || 0,
           distributionStatus: deliveryData.distributionStatus || 0,
           warehousingStatus: deliveryData.warehousingStatus || 0,
-          dataType: deliveryData.dataType || 0,
           entryUser: deliveryData.entryUser,
           operators: '[]',
           deliveryDate: deliveryData.deliveryDate
@@ -139,11 +136,10 @@ export default async function handler(
         const operatorName = deliveryData._operatorName || deliveryData.entryUser;
         const action = deliveryData._isBatchImport ? OperationActions.BATCH_IMPORT : OperationActions.CREATE;
 
-        const dataTypeText = newDelivery.dataType === 1 ? '客退' : '余货';
-        const recordInfo = `【${newDelivery.merchantName}】${newDelivery.productName} (${newDelivery.deliveryDate}) - ${dataTypeText} 派单:${newDelivery.dispatchQuantity} 预估:${newDelivery.estimatedSales}`;
+        const recordInfo = `【${newDelivery.merchantName}】${newDelivery.productName} (${newDelivery.deliveryDate}) 派单:${newDelivery.dispatchQuantity} 预估:${newDelivery.estimatedSales} 昨日余货:${newDelivery.surplusQuantity}`;
         const remarkText = action === OperationActions.BATCH_IMPORT
-          ? `批量导入${dataTypeText}: ${recordInfo}`
-          : `新增${dataTypeText}记录: ${recordInfo}`;
+          ? `批量导入: ${recordInfo}`
+          : `新增记录: ${recordInfo}`;
 
         await logOperation(
           newDelivery.id,
@@ -160,7 +156,6 @@ export default async function handler(
                 dispatchQuantity: newDelivery.dispatchQuantity,
                 estimatedSales: newDelivery.estimatedSales,
                 surplusQuantity: newDelivery.surplusQuantity,
-                dataType: newDelivery.dataType,
                 deliveryDate: newDelivery.deliveryDate,
               }
             }),
@@ -274,8 +269,31 @@ export default async function handler(
       }
 
       case 'DELETE': {
-        const { id, _operatorType, _operatorId, _operatorName } = req.query;
+        const { id, clearDate, _operatorType, _operatorId, _operatorName } = req.query;
 
+        // 批量删除指定日期的所有数据
+        if (clearDate && typeof clearDate === 'string') {
+          const deletedCount = await db.deleteDailyDeliveriesByDate(clearDate);
+
+          // 记录批量删除日志
+          await logOperation(
+            'batch-clear',
+            OperationActions.DELETE,
+            OperatorTypes.ADMIN,
+            'admin',
+            'admin',
+            {
+              remark: `清空当日数据: ${clearDate}，共删除 ${deletedCount} 条记录`
+            }
+          );
+
+          return res.status(200).json({
+            success: true,
+            data: { deletedCount, date: clearDate }
+          });
+        }
+
+        // 单条删除
         if (!id || typeof id !== 'string') {
           return res.status(400).json({
             success: false,

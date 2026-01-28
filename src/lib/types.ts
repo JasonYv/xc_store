@@ -108,10 +108,9 @@ export interface DailyDelivery {
   unit: string;                // 单位
   dispatchQuantity: number;    // 派单数量
   estimatedSales: number;      // 预估销售
-  surplusQuantity: number;     // 余货数量
+  surplusQuantity: number;     // 昨日余货数量
   distributionStatus: number;  // 配货状态：0-未配货、1-已配货、3-改配
   warehousingStatus: number;   // 入库状态：0-未入库、1-已入库
-  dataType: number;            // 数据类型：0-余货、1-客退
   entryUser: string;           // 录入人
   operators: string;           // 操作人列表（JSON字符串数组）
   deliveryDate: string;        // 日期（YYYY-MM-DD格式）
@@ -123,10 +122,9 @@ export interface DailyDeliveryFormData {
   unit: string;
   dispatchQuantity: number;
   estimatedSales: number;
-  surplusQuantity: number;     // 余货数量
+  surplusQuantity: number;     // 昨日余货数量
   distributionStatus: number;
   warehousingStatus: number;
-  dataType: number;            // 数据类型：0-余货、1-客退
   entryUser: string;
   deliveryDate: string;
 }

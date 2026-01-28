@@ -1570,8 +1570,8 @@ export class SqliteDatabase {
       `INSERT INTO daily_deliveries (
         id, createdAt, merchantName, productName, unit,
         dispatchQuantity, estimatedSales, surplusQuantity, distributionStatus,
-        warehousingStatus, dataType, entryUser, operators, deliveryDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        warehousingStatus, entryUser, operators, deliveryDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       createdAt,
       delivery.merchantName,
@@ -1582,7 +1582,6 @@ export class SqliteDatabase {
       delivery.surplusQuantity || 0,
       delivery.distributionStatus,
       delivery.warehousingStatus,
-      delivery.dataType || 0,
       delivery.entryUser,
       delivery.operators || '[]',
       delivery.deliveryDate
@@ -1592,8 +1591,7 @@ export class SqliteDatabase {
       id,
       createdAt,
       ...delivery,
-      surplusQuantity: delivery.surplusQuantity || 0,
-      dataType: delivery.dataType || 0
+      surplusQuantity: delivery.surplusQuantity || 0
     };
   }
 
@@ -1618,7 +1616,6 @@ export class SqliteDatabase {
       deliveryDate?: string;
       distributionStatus?: number;
       warehousingStatus?: number;
-      dataType?: number;
     },
     orderBy?: string,
     orderDirection?: 'ASC' | 'DESC'
@@ -1644,9 +1641,6 @@ export class SqliteDatabase {
       }
       if (filters.warehousingStatus !== undefined) {
         builder.where('warehousingStatus = ?', filters.warehousingStatus);
-      }
-      if (filters.dataType !== undefined) {
-        builder.where('dataType = ?', filters.dataType);
       }
     }
 
@@ -1707,6 +1701,19 @@ export class SqliteDatabase {
     );
 
     return result.changes ? result.changes > 0 : false;
+  }
+
+  // 批量删除指定日期的送货记录
+  async deleteDailyDeliveriesByDate(date: string): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM daily_deliveries WHERE deliveryDate = ?',
+      date
+    );
+
+    return result.changes || 0;
   }
 
   // 获取当日未配货列表（distributionStatus = 0 或 3改配）
@@ -1877,7 +1884,6 @@ export class SqliteDatabase {
       surplusQuantity: row.surplusQuantity || 0,
       distributionStatus: row.distributionStatus,
       warehousingStatus: row.warehousingStatus,
-      dataType: row.dataType || 0,
       entryUser: row.entryUser,
       operators: row.operators || '[]',
       deliveryDate: row.deliveryDate
@@ -2031,6 +2037,19 @@ export class SqliteDatabase {
     );
 
     return result.changes ? result.changes > 0 : false;
+  }
+
+  // 批量删除指定日期的余货/客退记录
+  async deleteReturnDetailsByDate(date: string): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM return_details WHERE returnDate = ?',
+      date
+    );
+
+    return result.changes || 0;
   }
 
   private rowToReturnDetail(row: any): ReturnDetail {

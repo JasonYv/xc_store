@@ -261,8 +261,31 @@ export default async function handler(
       }
 
       case 'DELETE': {
-        const { id, _operatorType, _operatorId, _operatorName } = req.query;
+        const { id, clearDate, _operatorType, _operatorId, _operatorName } = req.query;
 
+        // 批量删除指定日期的所有数据
+        if (clearDate && typeof clearDate === 'string') {
+          const deletedCount = await db.deleteReturnDetailsByDate(clearDate);
+
+          // 记录批量删除日志
+          await logOperation(
+            'batch-clear',
+            OperationActions.DELETE,
+            OperatorTypes.ADMIN,
+            'admin',
+            'admin',
+            {
+              remark: `清空当日数据: ${clearDate}，共删除 ${deletedCount} 条记录`
+            }
+          );
+
+          return res.status(200).json({
+            success: true,
+            data: { deletedCount, date: clearDate }
+          });
+        }
+
+        // 单条删除
         if (!id || typeof id !== 'string') {
           return res.status(400).json({
             success: false,

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Button } from "@/components/ui/button";
-import { Package, Calendar, Upload, X, MoreHorizontal, Edit, Trash2, RefreshCw, RotateCcw } from "lucide-react";
+import { Package, Calendar, Upload, X, MoreHorizontal, Edit, Trash2, RefreshCw, RotateCcw, AlertTriangle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Modal from '@/components/common/Modal';
-import { DailyDelivery, DailyDeliveryFormData, DataTypes } from '@/lib/types';
+import { DailyDelivery, DailyDeliveryFormData } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import {
   Table,
@@ -42,6 +42,8 @@ export default function DailyDeliveriesPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<DailyDelivery | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isClearingToday, setIsClearingToday] = useState(false);
 
   // 批量导入相关
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
@@ -50,7 +52,6 @@ export default function DailyDeliveriesPage() {
   const [isBatchImporting, setIsBatchImporting] = useState(false);
   const [importStep, setImportStep] = useState<'paste' | 'preview'>('paste'); // 导入步骤
   const [duplicateKeys, setDuplicateKeys] = useState<Set<string>>(new Set()); // 重复记录的键
-  const [selectedDataType, setSelectedDataType] = useState<number>(DataTypes.SURPLUS); // 数据类型：0-余货，1-客退
 
   // 筛选条件
   const [filters, setFilters] = useState({
@@ -58,8 +59,7 @@ export default function DailyDeliveriesPage() {
     productName: '',
     deliveryDate: '',
     distributionStatus: 'all',
-    warehousingStatus: 'all',
-    dataType: 'all'
+    warehousingStatus: 'all'
   });
 
   // 分页状态
@@ -75,6 +75,9 @@ export default function DailyDeliveriesPage() {
       router.push('/');
     } else {
       setIsAuthenticated(true);
+      // 检查是否是admin账号
+      const username = localStorage.getItem('username');
+      setIsAdmin(username === 'admin');
       fetchDeliveries();
     }
   }, [router]);
@@ -92,7 +95,6 @@ export default function DailyDeliveriesPage() {
       if (filters.deliveryDate) params.append('deliveryDate', filters.deliveryDate);
       if (filters.distributionStatus && filters.distributionStatus !== 'all') params.append('distributionStatus', filters.distributionStatus);
       if (filters.warehousingStatus && filters.warehousingStatus !== 'all') params.append('warehousingStatus', filters.warehousingStatus);
-      if (filters.dataType && filters.dataType !== 'all') params.append('dataType', filters.dataType);
 
       const response = await fetch(`/api/daily-deliveries?${params.toString()}`);
       const data = await response.json();
@@ -269,23 +271,20 @@ export default function DailyDeliveriesPage() {
 
         // 至少需要前3列: 商家名称、商品名称、单位
         if (cells.length >= 3) {
-          // 余货始终从最后一列读取（支持多种 Excel 格式）
-          // 格式1: 商家名称 | 商品名称 | 单位 | 实际退库 | 昨日入库 | 昨日销量 | 昨日余货
-          // 格式2: 商家名称 | 商品名称 | 单位 | 派单数量 | 预估销售 | ... | 余货
+          // Excel 格式: 商家名称 | 商品名称 | 单位 | 派单数量 | 预估销售 | ... | 昨日余货(最后一列)
+          const dispatchQuantity = cells.length > 3 ? parseInt(cells[3]?.trim()) || 0 : 0;
+          const estimatedSales = cells.length > 4 ? parseInt(cells[4]?.trim()) || 0 : 0;
           const surplusQuantity = cells.length > 3 ? parseInt(cells[cells.length - 1]?.trim()) || 0 : 0;
 
-          // 智能解析,自动填充缺失字段
-          // 派单数量和预估销售默认为0，配货状态和入库状态默认为0（未配货、未入库）
           parsed.push({
             merchantName: cells[0]?.trim() || '',
             productName: cells[1]?.trim() || '',
             unit: cells[2]?.trim() || '',
-            dispatchQuantity: 0,    // 默认为0，后续手动填写
-            estimatedSales: 0,      // 默认为0，后续手动填写
-            surplusQuantity: surplusQuantity,  // 从最后一列读取余货
+            dispatchQuantity: dispatchQuantity,   // 从第4列读取
+            estimatedSales: estimatedSales,       // 从第5列读取
+            surplusQuantity: surplusQuantity,     // 从最后一列读取昨日余货
             distributionStatus: 0,  // 默认未配货
             warehousingStatus: 0,   // 默认未入库
-            dataType: selectedDataType, // 使用选择的数据类型
             entryUser: currentUser,
             deliveryDate: today,
           });
@@ -432,7 +431,6 @@ export default function DailyDeliveriesPage() {
         setParsedData([]);
         setDuplicateKeys(new Set());
         setImportStep('paste');
-        setSelectedDataType(DataTypes.SURPLUS);
         fetchDeliveries();
       }
     } catch (error) {
@@ -463,7 +461,6 @@ export default function DailyDeliveriesPage() {
       surplusQuantity: parseInt(formData.get('surplusQuantity') as string) || 0,
       distributionStatus: parseInt(formData.get('distributionStatus') as string) || 0,
       warehousingStatus: parseInt(formData.get('warehousingStatus') as string) || 0,
-      dataType: parseInt(formData.get('dataType') as string) || 0,
       entryUser: formData.get('entryUser') as string,
       deliveryDate: formData.get('deliveryDate') as string,
     };
@@ -495,6 +492,44 @@ export default function DailyDeliveriesPage() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // 清空当日数据 (仅admin可用)
+  const handleClearTodayData = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (!confirm(`确定要清空今天 (${today}) 的所有送货数据吗？此操作不可恢复！`)) {
+      return;
+    }
+    // 二次确认
+    if (!confirm('再次确认：清空后数据将无法恢复，是否继续？')) {
+      return;
+    }
+
+    setIsClearingToday(true);
+    try {
+      const response = await fetch(`/api/daily-deliveries?clearDate=${today}&t=${Date.now()}`, {
+        method: 'DELETE'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: "清空成功",
+          description: `已清空 ${today} 的 ${data.data.deletedCount || 0} 条送货记录`,
+        });
+        fetchDeliveries();
+      } else {
+        throw new Error(data.error || '清空失败');
+      }
+    } catch (error: any) {
+      toast({
+        title: "清空失败",
+        description: error.message || '清空当日数据失败，请稍后再试',
+        variant: "destructive",
+      });
+    } finally {
+      setIsClearingToday(false);
     }
   };
 
@@ -530,9 +565,21 @@ export default function DailyDeliveriesPage() {
               管理每日派送和入库信息
             </p>
           </div>
-          <Button variant="outline" onClick={() => setIsBatchModalOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" /> 批量导入
-          </Button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button
+                variant="destructive"
+                onClick={handleClearTodayData}
+                disabled={isClearingToday}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                {isClearingToday ? '清空中...' : '清空当日数据'}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setIsBatchModalOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" /> 批量导入
+            </Button>
+          </div>
         </div>
 
         {/* 筛选条件 */}
@@ -541,7 +588,7 @@ export default function DailyDeliveriesPage() {
             <Calendar className="w-4 h-4" />
             筛选条件
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <Label>商家名称</Label>
               <Input
@@ -565,19 +612,6 @@ export default function DailyDeliveriesPage() {
                 value={filters.deliveryDate}
                 onChange={(e) => setFilters({...filters, deliveryDate: e.target.value})}
               />
-            </div>
-            <div>
-              <Label>数据类型</Label>
-              <Select value={filters.dataType} onValueChange={(v) => setFilters({...filters, dataType: v})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="0">余货</SelectItem>
-                  <SelectItem value="1">客退</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div>
               <Label>配货状态</Label>
@@ -625,10 +659,9 @@ export default function DailyDeliveriesPage() {
                   <TableHead>商家名称</TableHead>
                   <TableHead>商品名称</TableHead>
                   <TableHead>单位</TableHead>
-                  <TableHead>数据类型</TableHead>
                   <TableHead>派单数量</TableHead>
                   <TableHead>预估销售</TableHead>
-                  <TableHead>余货</TableHead>
+                  <TableHead>昨日余货</TableHead>
                   <TableHead>配货状态</TableHead>
                   <TableHead>入库状态</TableHead>
                   <TableHead>录入人</TableHead>
@@ -642,15 +675,6 @@ export default function DailyDeliveriesPage() {
                     <TableCell className="font-medium">{delivery.merchantName}</TableCell>
                     <TableCell>{delivery.productName}</TableCell>
                     <TableCell>{delivery.unit}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        delivery.dataType === DataTypes.RETURN
-                          ? 'bg-orange-100 text-orange-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}>
-                        {delivery.dataType === DataTypes.RETURN ? '客退' : '余货'}
-                      </span>
-                    </TableCell>
                     <TableCell>{delivery.dispatchQuantity}</TableCell>
                     <TableCell>{delivery.estimatedSales}</TableCell>
                     <TableCell>{delivery.surplusQuantity || 0}</TableCell>
@@ -772,7 +796,6 @@ export default function DailyDeliveriesPage() {
                     setParsedData([]);
                     setDuplicateKeys(new Set());
                     setImportStep('paste');
-                    setSelectedDataType(DataTypes.SURPLUS);
                   }}
                 >
                   <X className="h-5 w-5" />
@@ -794,46 +817,8 @@ export default function DailyDeliveriesPage() {
               </ol>
               <div className="mt-3 text-xs text-blue-700 bg-blue-100 p-2 rounded space-y-1">
                 <div><strong>必填字段:</strong> 商家名称 | 商品名称 | 单位</div>
-                <div><strong>余货格式:</strong> 商家名称 | 商品名称 | 单位 | ... | <strong>昨日余货(最后一列)</strong></div>
-                <div className="text-blue-600">💡 提示: 余货数量从最后一列读取，派单数量和预估销售默认为0，可后续编辑修改</div>
-              </div>
-            </div>
-
-            {/* 数据类型选择 */}
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-              <Label className="text-base font-semibold text-yellow-900 mb-3 block">选择数据类型 *</Label>
-              <div className="flex gap-4">
-                <label className={`flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer border-2 transition-all ${
-                  selectedDataType === DataTypes.SURPLUS
-                    ? 'bg-green-100 border-green-500 text-green-800'
-                    : 'bg-white border-gray-200 hover:border-gray-300'
-                }`}>
-                  <input
-                    type="radio"
-                    name="dataType"
-                    value={DataTypes.SURPLUS}
-                    checked={selectedDataType === DataTypes.SURPLUS}
-                    onChange={() => setSelectedDataType(DataTypes.SURPLUS)}
-                    className="w-4 h-4 text-green-600"
-                  />
-                  <span className="font-medium">余货</span>
-                  <span className="text-sm text-gray-500">(默认)</span>
-                </label>
-                <label className={`flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer border-2 transition-all ${
-                  selectedDataType === DataTypes.RETURN
-                    ? 'bg-orange-100 border-orange-500 text-orange-800'
-                    : 'bg-white border-gray-200 hover:border-gray-300'
-                }`}>
-                  <input
-                    type="radio"
-                    name="dataType"
-                    value={DataTypes.RETURN}
-                    checked={selectedDataType === DataTypes.RETURN}
-                    onChange={() => setSelectedDataType(DataTypes.RETURN)}
-                    className="w-4 h-4 text-orange-600"
-                  />
-                  <span className="font-medium">客退</span>
-                </label>
+                <div><strong>完整格式:</strong> 商家名称 | 商品名称 | 单位 | <strong>派单数量</strong> | <strong>预估销售</strong> | ... | <strong>昨日余货(最后一列)</strong></div>
+                <div className="text-blue-600">💡 提示: 派单数量从第4列读取，预估销售从第5列读取，昨日余货从最后一列读取</div>
               </div>
             </div>
 
@@ -842,7 +827,7 @@ export default function DailyDeliveriesPage() {
               <Label>粘贴 Excel 数据</Label>
               <textarea
                 className="w-full h-64 p-3 border rounded-md font-mono text-sm"
-                placeholder="在 Excel 中选中数据并复制,然后粘贴到这里 (Ctrl+V)...&#10;&#10;格式: 商家名称 | 商品名称 | 单位 | ... | 昨日余货(最后一列)"
+                placeholder="在 Excel 中选中数据并复制,然后粘贴到这里 (Ctrl+V)...&#10;&#10;格式: 商家名称 | 商品名称 | 单位 | 派单数量 | 预估销售 | ... | 昨日余货(最后一列)"
                 value={pasteData}
                 onChange={(e) => setPasteData(e.target.value)}
               />
@@ -857,7 +842,6 @@ export default function DailyDeliveriesPage() {
                   setParsedData([]);
                   setDuplicateKeys(new Set());
                   setImportStep('paste');
-                  setSelectedDataType(DataTypes.SURPLUS);
                 }}
               >
                 取消
@@ -893,10 +877,9 @@ export default function DailyDeliveriesPage() {
                         <TableHead className="font-semibold bg-gray-100">商家名称</TableHead>
                         <TableHead className="font-semibold bg-gray-100">商品名称</TableHead>
                         <TableHead className="font-semibold bg-gray-100">单位</TableHead>
-                        <TableHead className="text-center font-semibold bg-gray-100">数据类型</TableHead>
                         <TableHead className="text-center font-semibold bg-gray-100">派单数量</TableHead>
                         <TableHead className="text-center font-semibold bg-gray-100">预估销售</TableHead>
-                        <TableHead className="text-center font-semibold bg-gray-100">余货</TableHead>
+                        <TableHead className="text-center font-semibold bg-gray-100">昨日余货</TableHead>
                         <TableHead className="text-center font-semibold bg-gray-100">配货状态</TableHead>
                         <TableHead className="text-center font-semibold bg-gray-100">入库状态</TableHead>
                         <TableHead className="font-semibold bg-gray-100">录入人</TableHead>
@@ -925,15 +908,6 @@ export default function DailyDeliveriesPage() {
                             </TableCell>
                             <TableCell className={isDuplicate ? 'line-through text-gray-400' : ''}>{item.productName}</TableCell>
                             <TableCell className={`text-center ${isDuplicate ? 'line-through text-gray-400' : ''}`}>{item.unit}</TableCell>
-                            <TableCell className="text-center">
-                              <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
-                                isDuplicate ? 'bg-gray-200 text-gray-400' :
-                                item.dataType === DataTypes.RETURN ? 'bg-orange-100 text-orange-700' :
-                                'bg-green-100 text-green-700'
-                              }`}>
-                                {item.dataType === DataTypes.RETURN ? '客退' : '余货'}
-                              </span>
-                            </TableCell>
                             <TableCell className={`text-center ${isDuplicate ? 'line-through text-gray-400' : ''}`}>{item.dispatchQuantity}</TableCell>
                             <TableCell className={`text-center ${isDuplicate ? 'line-through text-gray-400' : ''}`}>{item.estimatedSales}</TableCell>
                             <TableCell className={`text-center ${isDuplicate ? 'line-through text-gray-400' : ''}`}>{item.surplusQuantity || 0}</TableCell>
@@ -991,7 +965,6 @@ export default function DailyDeliveriesPage() {
                     setParsedData([]);
                     setDuplicateKeys(new Set());
                     setImportStep('paste');
-                    setSelectedDataType(DataTypes.SURPLUS);
                   }}
                 >
                   取消
@@ -1037,7 +1010,7 @@ export default function DailyDeliveriesPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <Label htmlFor="unit">单位 *</Label>
                 <Input
@@ -1047,20 +1020,6 @@ export default function DailyDeliveriesPage() {
                   required
                 />
               </div>
-              <div>
-                <Label htmlFor="dataType">数据类型</Label>
-                <Select name="dataType" defaultValue={selectedDelivery?.dataType?.toString() || '0'}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">余货</SelectItem>
-                    <SelectItem value="1">客退</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
               <div>
                 <Label htmlFor="dispatchQuantity">派单数量</Label>
                 <Input
@@ -1080,7 +1039,7 @@ export default function DailyDeliveriesPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="surplusQuantity">余货</Label>
+                <Label htmlFor="surplusQuantity">昨日余货</Label>
                 <Input
                   id="surplusQuantity"
                   name="surplusQuantity"
