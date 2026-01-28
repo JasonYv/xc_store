@@ -33,6 +33,33 @@ async function logOperation(
   }
 }
 
+// 数据类型标签
+function getDataTypeLabel(dataType: number | undefined): string {
+  return dataType === 1 ? '客退' : '余货';
+}
+
+// 字段名中文映射
+const fieldLabelMap: Record<string, string> = {
+  merchantName: '商家名称',
+  productName: '商品名称',
+  unit: '单位',
+  actualReturnQuantity: '实退数量',
+  goodQuantity: '正品数量',
+  defectiveQuantity: '残品数量',
+  retrievalStatus: '取回状态',
+  retrievedGoodQuantity: '取回正品数',
+  retrievedDefectiveQuantity: '取回残品数',
+  dataType: '数据类型',
+  entryUser: '录入人',
+  returnDate: '日期',
+};
+
+// 生成记录标识前缀，如 "[余货] 商家A - 手抓饼: "
+function getRecordPrefix(record: any): string {
+  const typeLabel = getDataTypeLabel(record.dataType);
+  return `[${typeLabel}] ${record.merchantName} - ${record.productName}: `;
+}
+
 // 比较两个对象的差异
 function getChanges(oldData: any, newData: any): { fieldName: string; oldValue: string; newValue: string }[] {
   const changes: { fieldName: string; oldValue: string; newValue: string }[] = [];
@@ -133,7 +160,7 @@ export default async function handler(
           operatorName,
           {
             changeDetail: JSON.stringify(newReturnDetail),
-            remark: action === OperationActions.BATCH_IMPORT ? '批量导入' : '新增记录'
+            remark: `${getRecordPrefix(newReturnDetail)}${action === OperationActions.BATCH_IMPORT ? '批量导入' : '新增记录'}`
           }
         );
 
@@ -193,16 +220,24 @@ export default async function handler(
         const isStatusChange = _isStatusChange || changes.some(c => c.fieldName === 'retrievalStatus');
         const action = isStatusChange ? OperationActions.STATUS_CHANGE : OperationActions.UPDATE;
 
-        // 生成变更备注
+        // 生成变更备注（包含具体记录信息）
+        const prefix = getRecordPrefix(oldReturnDetail);
         let remark = '';
         if (isStatusChange) {
           const statusChange = changes.find(c => c.fieldName === 'retrievalStatus');
           if (statusChange) {
             const statusLabels: Record<string, string> = { '0': '未取回', '1': '已取回' };
-            remark = `取回状态: ${statusLabels[statusChange.oldValue] || statusChange.oldValue} → ${statusLabels[statusChange.newValue] || statusChange.newValue}`;
+            remark = `${prefix}取回状态: ${statusLabels[statusChange.oldValue] || statusChange.oldValue} → ${statusLabels[statusChange.newValue] || statusChange.newValue}`;
+          }
+          // 如果同时有取回数量变更，追加信息
+          const qtyChanges = changes.filter(c => c.fieldName === 'retrievedGoodQuantity' || c.fieldName === 'retrievedDefectiveQuantity');
+          if (qtyChanges.length > 0) {
+            const qtyInfo = qtyChanges.map(c => `${fieldLabelMap[c.fieldName] || c.fieldName}: ${c.oldValue} → ${c.newValue}`).join(', ');
+            remark += remark ? `, ${qtyInfo}` : `${prefix}${qtyInfo}`;
           }
         } else {
-          remark = `修改了 ${changes.map(c => c.fieldName).join(', ')}`;
+          const fieldNames = changes.map(c => fieldLabelMap[c.fieldName] || c.fieldName).join(', ');
+          remark = `${prefix}修改了 ${fieldNames}`;
         }
 
         if (changes.length > 0) {
@@ -269,7 +304,7 @@ export default async function handler(
           operatorName,
           {
             changeDetail: JSON.stringify(oldReturnDetail),
-            remark: `删除记录: ${oldReturnDetail.merchantName} - ${oldReturnDetail.productName}`
+            remark: `${getRecordPrefix(oldReturnDetail)}删除记录`
           }
         );
 

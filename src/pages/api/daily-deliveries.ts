@@ -33,6 +33,21 @@ async function logOperation(
   }
 }
 
+// 字段名中文映射
+const fieldLabelMap: Record<string, string> = {
+  merchantName: '商家名称',
+  productName: '商品名称',
+  unit: '单位',
+  dispatchQuantity: '派单数量',
+  estimatedSales: '预估销售',
+  surplusQuantity: '余货数量',
+  distributionStatus: '配货状态',
+  warehousingStatus: '入库状态',
+  dataType: '数据类型',
+  entryUser: '录入人',
+  deliveryDate: '日期',
+};
+
 // 比较两个对象的差异
 function getChanges(oldData: any, newData: any): { fieldName: string; oldValue: string; newValue: string }[] {
   const changes: { fieldName: string; oldValue: string; newValue: string }[] = [];
@@ -227,7 +242,7 @@ export default async function handler(
           }).join('; ');
           remark = `${recordInfo} ${statusChangeText}`;
         } else {
-          remark = `${recordInfo} 修改了 ${changes.map(c => c.fieldName).join(', ')}`;
+          remark = `${recordInfo} 修改了 ${changes.map(c => fieldLabelMap[c.fieldName] || c.fieldName).join(', ')}`;
         }
 
         if (changes.length > 0) {
