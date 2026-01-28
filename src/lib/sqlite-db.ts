@@ -2,7 +2,7 @@ import sqlite3 from 'sqlite3';
 import { open, Database as SQLiteDatabase } from 'sqlite';
 import path from 'path';
 import fs from 'fs';
-import { Merchant, User, Product, ProductSalesOrder } from './types';
+import { Merchant, User, Product, ProductSalesOrder, DailyDelivery, ReturnDetail, Employee, OperationLog, OperationLogFormData } from './types';
 import crypto from 'crypto';
 import { PaginationHelper, PaginationParams, PaginationResult, QueryBuilder } from './pagination';
 
@@ -99,6 +99,124 @@ export class SqliteDatabase {
           value TEXT NOT NULL,
           updatedAt TEXT NOT NULL
         )
+      `);
+
+      // 创建daily_deliveries表（当日送货）
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS daily_deliveries (
+          id TEXT PRIMARY KEY,
+          createdAt TEXT NOT NULL,
+          merchantName TEXT NOT NULL,
+          productName TEXT NOT NULL,
+          unit TEXT NOT NULL,
+          dispatchQuantity INTEGER NOT NULL DEFAULT 0,
+          estimatedSales INTEGER NOT NULL DEFAULT 0,
+          surplusQuantity INTEGER NOT NULL DEFAULT 0,
+          distributionStatus INTEGER NOT NULL DEFAULT 0,
+          warehousingStatus INTEGER NOT NULL DEFAULT 0,
+          entryUser TEXT NOT NULL,
+          operators TEXT NOT NULL DEFAULT '[]',
+          deliveryDate TEXT NOT NULL
+        )
+      `);
+
+      // 迁移：为现有表添加 surplusQuantity 字段
+      try {
+        await this.db.exec(`ALTER TABLE daily_deliveries ADD COLUMN surplusQuantity INTEGER NOT NULL DEFAULT 0`);
+      } catch (e) {
+        // 字段已存在，忽略错误
+      }
+
+      // 迁移：为现有表添加 dataType 字段（0=余货, 1=客退）
+      try {
+        await this.db.exec(`ALTER TABLE daily_deliveries ADD COLUMN dataType INTEGER NOT NULL DEFAULT 0`);
+      } catch (e) {
+        // 字段已存在，忽略错误
+      }
+
+      // 创建daily_deliveries索引
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_daily_deliveries_date ON daily_deliveries(deliveryDate);
+        CREATE INDEX IF NOT EXISTS idx_daily_deliveries_merchant ON daily_deliveries(merchantName);
+        CREATE INDEX IF NOT EXISTS idx_daily_deliveries_product ON daily_deliveries(productName);
+        CREATE INDEX IF NOT EXISTS idx_daily_deliveries_status ON daily_deliveries(distributionStatus, warehousingStatus);
+      `);
+
+      // 创建return_details表（余货/客退明细）
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS return_details (
+          id TEXT PRIMARY KEY,
+          createdAt TEXT NOT NULL,
+          merchantName TEXT NOT NULL,
+          productName TEXT NOT NULL,
+          unit TEXT NOT NULL,
+          actualReturnQuantity INTEGER NOT NULL DEFAULT 0,
+          goodQuantity INTEGER NOT NULL DEFAULT 0,
+          defectiveQuantity INTEGER NOT NULL DEFAULT 0,
+          retrievalStatus INTEGER NOT NULL DEFAULT 0,
+          retrievedGoodQuantity INTEGER NOT NULL DEFAULT 0,
+          retrievedDefectiveQuantity INTEGER NOT NULL DEFAULT 0,
+          entryUser TEXT NOT NULL,
+          operators TEXT NOT NULL DEFAULT '[]',
+          returnDate TEXT NOT NULL
+        )
+      `);
+
+      // 迁移：为现有表添加 dataType 字段（0=余货, 1=客退）
+      try {
+        await this.db.exec(`ALTER TABLE return_details ADD COLUMN dataType INTEGER NOT NULL DEFAULT 0`);
+      } catch (e) {
+        // 字段已存在，忽略错误
+      }
+
+      // 创建return_details索引
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_return_details_date ON return_details(returnDate);
+        CREATE INDEX IF NOT EXISTS idx_return_details_merchant ON return_details(merchantName);
+        CREATE INDEX IF NOT EXISTS idx_return_details_product ON return_details(productName);
+        CREATE INDEX IF NOT EXISTS idx_return_details_status ON return_details(retrievalStatus);
+      `);
+
+      // 创建employees表（员工表）
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS employees (
+          id TEXT PRIMARY KEY,
+          createdAt TEXT NOT NULL,
+          employeeNumber TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          realName TEXT NOT NULL,
+          phone TEXT NOT NULL DEFAULT '',
+          password TEXT NOT NULL DEFAULT '',
+          loginCode TEXT NOT NULL UNIQUE,
+          lastLoginTime TEXT
+        )
+      `);
+
+      // 创建operation_logs表（操作日志表）
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS operation_logs (
+          id TEXT PRIMARY KEY,
+          createdAt TEXT NOT NULL,
+          targetTable TEXT NOT NULL,
+          targetId TEXT NOT NULL,
+          action TEXT NOT NULL,
+          operatorType TEXT NOT NULL,
+          operatorId TEXT NOT NULL,
+          operatorName TEXT NOT NULL,
+          fieldName TEXT,
+          oldValue TEXT,
+          newValue TEXT,
+          changeDetail TEXT,
+          remark TEXT
+        )
+      `);
+
+      // 创建operation_logs索引
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_operation_logs_target ON operation_logs(targetTable, targetId);
+        CREATE INDEX IF NOT EXISTS idx_operation_logs_operator ON operation_logs(operatorType, operatorId);
+        CREATE INDEX IF NOT EXISTS idx_operation_logs_action ON operation_logs(action);
+        CREATE INDEX IF NOT EXISTS idx_operation_logs_date ON operation_logs(createdAt);
       `);
 
       // 检查是否需要创建默认设置
@@ -253,6 +371,20 @@ export class SqliteDatabase {
         await this.db.exec(`ALTER TABLE product_sales_orders ADD COLUMN updatedAt TEXT NOT NULL DEFAULT ''`);
         // 为现有记录设置updatedAt为createdAt的值
         await this.db.exec(`UPDATE product_sales_orders SET updatedAt = createdAt WHERE updatedAt = ''`);
+      }
+
+      // 检查 employees 表的列
+      const employeeColumns = await this.db.all('PRAGMA table_info(employees)');
+      const employeeColumnNames = employeeColumns.map((col: any) => col.name);
+
+      // 添加 phone 列到 employees 表
+      if (!employeeColumnNames.includes('phone')) {
+        await this.db.exec(`ALTER TABLE employees ADD COLUMN phone TEXT NOT NULL DEFAULT ''`);
+      }
+
+      // 添加 password 列到 employees 表
+      if (!employeeColumnNames.includes('password')) {
+        await this.db.exec(`ALTER TABLE employees ADD COLUMN password TEXT NOT NULL DEFAULT ''`);
       }
     } catch (error) {
       console.error('Error migrating columns:', error);
@@ -1422,6 +1554,998 @@ export class SqliteDatabase {
       estimatedSales: row.estimatedSales,
       totalSales: row.totalSales,
       salesQuantity: row.salesQuantity
+    };
+  }
+
+  // ==================== Daily Deliveries (当日送货) ====================
+
+  async insertDailyDelivery(delivery: Omit<DailyDelivery, 'id' | 'createdAt'>): Promise<DailyDelivery> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const id = Date.now().toString();
+    const createdAt = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT INTO daily_deliveries (
+        id, createdAt, merchantName, productName, unit,
+        dispatchQuantity, estimatedSales, surplusQuantity, distributionStatus,
+        warehousingStatus, dataType, entryUser, operators, deliveryDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      createdAt,
+      delivery.merchantName,
+      delivery.productName,
+      delivery.unit,
+      delivery.dispatchQuantity,
+      delivery.estimatedSales,
+      delivery.surplusQuantity || 0,
+      delivery.distributionStatus,
+      delivery.warehousingStatus,
+      delivery.dataType || 0,
+      delivery.entryUser,
+      delivery.operators || '[]',
+      delivery.deliveryDate
+    );
+
+    return {
+      id,
+      createdAt,
+      ...delivery,
+      surplusQuantity: delivery.surplusQuantity || 0,
+      dataType: delivery.dataType || 0
+    };
+  }
+
+  async getDailyDeliveryById(id: string): Promise<DailyDelivery | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM daily_deliveries WHERE id = ?',
+      id
+    );
+
+    return row ? this.rowToDailyDelivery(row) : null;
+  }
+
+  async getDailyDeliveriesPaginated(
+    page: number,
+    pageSize: number,
+    filters?: {
+      merchantName?: string;
+      productName?: string;
+      deliveryDate?: string;
+      distributionStatus?: number;
+      warehousingStatus?: number;
+      dataType?: number;
+    },
+    orderBy?: string,
+    orderDirection?: 'ASC' | 'DESC'
+  ): Promise<PaginationResult<DailyDelivery>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const builder = new QueryBuilder('daily_deliveries');
+    builder.select('*');
+
+    if (filters) {
+      if (filters.merchantName) {
+        builder.where('merchantName LIKE ?', `%${filters.merchantName}%`);
+      }
+      if (filters.productName) {
+        builder.where('productName LIKE ?', `%${filters.productName}%`);
+      }
+      if (filters.deliveryDate) {
+        builder.where('deliveryDate = ?', filters.deliveryDate);
+      }
+      if (filters.distributionStatus !== undefined) {
+        builder.where('distributionStatus = ?', filters.distributionStatus);
+      }
+      if (filters.warehousingStatus !== undefined) {
+        builder.where('warehousingStatus = ?', filters.warehousingStatus);
+      }
+      if (filters.dataType !== undefined) {
+        builder.where('dataType = ?', filters.dataType);
+      }
+    }
+
+    builder.orderBy(orderBy || 'createdAt', orderDirection || 'DESC');
+    builder.paginate(page, pageSize);
+
+    const query = builder.buildQuery();
+    const countQuery = builder.buildCountQuery();
+
+    const [rows, countResult] = await Promise.all([
+      this.db.all(query.sql, ...query.params),
+      this.db.get(countQuery.sql, ...countQuery.params)
+    ]);
+
+    const total = countResult.count;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      items: rows.map(row => this.rowToDailyDelivery(row)),
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  async updateDailyDelivery(id: string, updatedData: Partial<DailyDelivery>): Promise<DailyDelivery | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existingDelivery = await this.getDailyDeliveryById(id);
+    if (!existingDelivery) return null;
+
+    const fields = Object.keys(updatedData).filter(key =>
+      key !== 'id' && key !== 'createdAt'
+    );
+
+    if (fields.length === 0) return existingDelivery;
+
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const values = fields.map(field => updatedData[field as keyof typeof updatedData]);
+
+    await this.db.run(
+      `UPDATE daily_deliveries SET ${setClause} WHERE id = ?`,
+      ...values, id
+    );
+
+    return this.getDailyDeliveryById(id);
+  }
+
+  async deleteDailyDelivery(id: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM daily_deliveries WHERE id = ?',
+      id
+    );
+
+    return result.changes ? result.changes > 0 : false;
+  }
+
+  // 获取当日未配货列表（distributionStatus = 0 或 3改配）
+  async getTodayUndeliveredList(date: string): Promise<(DailyDelivery & { productImage?: string })[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      `SELECT d.*, p.pinduoduoProductImage as productImage
+       FROM daily_deliveries d
+       LEFT JOIN products p ON d.productName = p.productName
+       WHERE d.deliveryDate = ? AND (d.distributionStatus = 0 OR d.distributionStatus = 3)
+       ORDER BY d.createdAt DESC`,
+      date
+    );
+
+    return rows.map(row => ({
+      ...this.rowToDailyDelivery(row),
+      productImage: row.productImage || undefined
+    }));
+  }
+
+  // 获取当日未入库列表（已配货 distributionStatus = 1 且 未入库 warehousingStatus = 0）
+  async getTodayUnstockedList(date: string): Promise<(DailyDelivery & { productImage?: string })[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      `SELECT d.*, p.pinduoduoProductImage as productImage
+       FROM daily_deliveries d
+       LEFT JOIN products p ON d.productName = p.productName
+       WHERE d.deliveryDate = ? AND d.distributionStatus = 1 AND d.warehousingStatus = 0
+       ORDER BY d.createdAt DESC`,
+      date
+    );
+
+    return rows.map(row => ({
+      ...this.rowToDailyDelivery(row),
+      productImage: row.productImage || undefined
+    }));
+  }
+
+  // 获取当日入库列表（所有已配货的记录，包含已入库和未入库，用于入库页面展示）
+  async getTodayStockList(date: string): Promise<(DailyDelivery & { productImage?: string })[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      `SELECT d.*, p.pinduoduoProductImage as productImage
+       FROM daily_deliveries d
+       LEFT JOIN products p ON d.productName = p.productName
+       WHERE d.deliveryDate = ? AND d.distributionStatus = 1
+       ORDER BY d.warehousingStatus ASC, d.createdAt DESC`,
+      date
+    );
+
+    return rows.map(row => ({
+      ...this.rowToDailyDelivery(row),
+      productImage: row.productImage || undefined
+    }));
+  }
+
+  // 检查当日送货记录是否已存在（用于导入时的重复检测）
+  async checkDailyDeliveryExists(merchantName: string, productName: string, deliveryDate: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT 1 FROM daily_deliveries WHERE merchantName = ? AND productName = ? AND deliveryDate = ?',
+      merchantName,
+      productName,
+      deliveryDate
+    );
+
+    return !!row;
+  }
+
+  // 批量检查当日送货记录是否已存在（用于导入时的重复检测，返回已存在的记录键值）
+  async checkDailyDeliveriesExist(items: { merchantName: string; productName: string; deliveryDate: string }[]): Promise<Set<string>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existingKeys = new Set<string>();
+
+    // 获取所有涉及日期的记录
+    const dates = Array.from(new Set(items.map(item => item.deliveryDate)));
+
+    for (const date of dates) {
+      const rows = await this.db.all(
+        'SELECT merchantName, productName FROM daily_deliveries WHERE deliveryDate = ?',
+        date
+      );
+
+      for (const row of rows) {
+        const key = `${row.merchantName}|${row.productName}|${date}`;
+        existingKeys.add(key);
+      }
+    }
+
+    return existingKeys;
+  }
+
+  // 统计当日送货记录数量（根据过滤条件）
+  async countDailyDeliveries(filters?: {
+    merchantName?: string;
+    productName?: string;
+    deliveryDate?: string;
+    distributionStatus?: number;
+    warehousingStatus?: number;
+    dataType?: number;
+  }): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    let sql = 'SELECT COUNT(*) as count FROM daily_deliveries WHERE 1=1';
+    const params: any[] = [];
+
+    if (filters) {
+      if (filters.merchantName) {
+        sql += ' AND merchantName LIKE ?';
+        params.push(`%${filters.merchantName}%`);
+      }
+      if (filters.productName) {
+        sql += ' AND productName LIKE ?';
+        params.push(`%${filters.productName}%`);
+      }
+      if (filters.deliveryDate) {
+        sql += ' AND deliveryDate = ?';
+        params.push(filters.deliveryDate);
+      }
+      if (filters.distributionStatus !== undefined) {
+        sql += ' AND distributionStatus = ?';
+        params.push(filters.distributionStatus);
+      }
+      if (filters.warehousingStatus !== undefined) {
+        sql += ' AND warehousingStatus = ?';
+        params.push(filters.warehousingStatus);
+      }
+      if (filters.dataType !== undefined) {
+        sql += ' AND dataType = ?';
+        params.push(filters.dataType);
+      }
+    }
+
+    const row = await this.db.get(sql, ...params);
+    return row?.count || 0;
+  }
+
+  // 根据自定义条件统计数量
+  async countDailyDeliveriesByCondition(condition: string, params: any[]): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const sql = `SELECT COUNT(*) as count FROM daily_deliveries WHERE ${condition}`;
+    const row = await this.db.get(sql, ...params);
+    return row?.count || 0;
+  }
+
+  private rowToDailyDelivery(row: any): DailyDelivery {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      merchantName: row.merchantName,
+      productName: row.productName,
+      unit: row.unit,
+      dispatchQuantity: row.dispatchQuantity,
+      estimatedSales: row.estimatedSales,
+      surplusQuantity: row.surplusQuantity || 0,
+      distributionStatus: row.distributionStatus,
+      warehousingStatus: row.warehousingStatus,
+      dataType: row.dataType || 0,
+      entryUser: row.entryUser,
+      operators: row.operators || '[]',
+      deliveryDate: row.deliveryDate
+    };
+  }
+
+  // ==================== Return Details (余货/客退明细) ====================
+
+  async insertReturnDetail(returnDetail: Omit<ReturnDetail, 'id' | 'createdAt'>): Promise<ReturnDetail> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const id = Date.now().toString();
+    const createdAt = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT INTO return_details (
+        id, createdAt, merchantName, productName, unit,
+        actualReturnQuantity, goodQuantity, defectiveQuantity,
+        retrievalStatus, retrievedGoodQuantity, retrievedDefectiveQuantity,
+        dataType, entryUser, operators, returnDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      createdAt,
+      returnDetail.merchantName,
+      returnDetail.productName,
+      returnDetail.unit,
+      returnDetail.actualReturnQuantity,
+      returnDetail.goodQuantity,
+      returnDetail.defectiveQuantity,
+      returnDetail.retrievalStatus,
+      returnDetail.retrievedGoodQuantity,
+      returnDetail.retrievedDefectiveQuantity,
+      returnDetail.dataType || 0,
+      returnDetail.entryUser,
+      returnDetail.operators || '[]',
+      returnDetail.returnDate
+    );
+
+    return {
+      id,
+      createdAt,
+      ...returnDetail,
+      dataType: returnDetail.dataType || 0
+    };
+  }
+
+  async getReturnDetailById(id: string): Promise<ReturnDetail | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM return_details WHERE id = ?',
+      id
+    );
+
+    return row ? this.rowToReturnDetail(row) : null;
+  }
+
+  async getReturnDetailsPaginated(
+    page: number,
+    pageSize: number,
+    filters?: {
+      merchantName?: string;
+      productName?: string;
+      returnDate?: string;
+      retrievalStatus?: number;
+      dataType?: number;
+    },
+    orderBy?: string,
+    orderDirection?: 'ASC' | 'DESC'
+  ): Promise<PaginationResult<ReturnDetail>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const builder = new QueryBuilder('return_details');
+    builder.select('*');
+
+    if (filters) {
+      if (filters.merchantName) {
+        builder.where('merchantName LIKE ?', `%${filters.merchantName}%`);
+      }
+      if (filters.productName) {
+        builder.where('productName LIKE ?', `%${filters.productName}%`);
+      }
+      if (filters.returnDate) {
+        builder.where('returnDate = ?', filters.returnDate);
+      }
+      if (filters.retrievalStatus !== undefined) {
+        builder.where('retrievalStatus = ?', filters.retrievalStatus);
+      }
+      if (filters.dataType !== undefined) {
+        builder.where('dataType = ?', filters.dataType);
+      }
+    }
+
+    builder.orderBy(orderBy || 'createdAt', orderDirection || 'DESC');
+    builder.paginate(page, pageSize);
+
+    const query = builder.buildQuery();
+    const countQuery = builder.buildCountQuery();
+
+    const [rows, countResult] = await Promise.all([
+      this.db.all(query.sql, ...query.params),
+      this.db.get(countQuery.sql, ...countQuery.params)
+    ]);
+
+    const total = countResult.count;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      items: rows.map(row => this.rowToReturnDetail(row)),
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  async updateReturnDetail(id: string, updatedData: Partial<ReturnDetail>): Promise<ReturnDetail | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existingReturnDetail = await this.getReturnDetailById(id);
+    if (!existingReturnDetail) return null;
+
+    const fields = Object.keys(updatedData).filter(key =>
+      key !== 'id' && key !== 'createdAt'
+    );
+
+    if (fields.length === 0) return existingReturnDetail;
+
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const values = fields.map(field => updatedData[field as keyof typeof updatedData]);
+
+    await this.db.run(
+      `UPDATE return_details SET ${setClause} WHERE id = ?`,
+      ...values, id
+    );
+
+    return this.getReturnDetailById(id);
+  }
+
+  async deleteReturnDetail(id: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM return_details WHERE id = ?',
+      id
+    );
+
+    return result.changes ? result.changes > 0 : false;
+  }
+
+  private rowToReturnDetail(row: any): ReturnDetail {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      merchantName: row.merchantName,
+      productName: row.productName,
+      unit: row.unit,
+      actualReturnQuantity: row.actualReturnQuantity,
+      goodQuantity: row.goodQuantity,
+      defectiveQuantity: row.defectiveQuantity,
+      retrievalStatus: row.retrievalStatus,
+      retrievedGoodQuantity: row.retrievedGoodQuantity,
+      retrievedDefectiveQuantity: row.retrievedDefectiveQuantity,
+      dataType: row.dataType || 0,
+      entryUser: row.entryUser,
+      operators: row.operators || '[]',
+      returnDate: row.returnDate
+    };
+  }
+
+  // ==================== Employees (员工表) ====================
+
+  async insertEmployee(employee: Omit<Employee, 'id' | 'createdAt'>): Promise<Employee> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 检查员工编号是否已存在
+    const existingByNumber = await this.db.get(
+      'SELECT * FROM employees WHERE employeeNumber = ?',
+      employee.employeeNumber
+    );
+    if (existingByNumber) {
+      throw new Error('员工编号已存在');
+    }
+
+    // 检查登录码是否已存在
+    const existingByCode = await this.db.get(
+      'SELECT * FROM employees WHERE loginCode = ?',
+      employee.loginCode
+    );
+    if (existingByCode) {
+      throw new Error('登录码已存在');
+    }
+
+    // 检查手机号是否已存在（如果提供了手机号）
+    if (employee.phone) {
+      const existingByPhone = await this.db.get(
+        'SELECT * FROM employees WHERE phone = ?',
+        employee.phone
+      );
+      if (existingByPhone) {
+        throw new Error('手机号已被其他员工使用');
+      }
+    }
+
+    const id = Date.now().toString();
+    const createdAt = new Date().toISOString();
+
+    // 密码哈希处理
+    const hashedPassword = employee.password ? this.hashPassword(employee.password) : '';
+
+    await this.db.run(
+      `INSERT INTO employees (
+        id, createdAt, employeeNumber, name, realName, phone, password, loginCode, lastLoginTime
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      createdAt,
+      employee.employeeNumber,
+      employee.name,
+      employee.realName,
+      employee.phone || '',
+      hashedPassword,
+      employee.loginCode,
+      employee.lastLoginTime || null
+    );
+
+    return {
+      id,
+      createdAt,
+      ...employee,
+      password: hashedPassword // 返回哈希后的密码
+    };
+  }
+
+  async getEmployeeById(id: string): Promise<Employee | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM employees WHERE id = ?',
+      id
+    );
+
+    return row ? this.rowToEmployee(row) : null;
+  }
+
+  async getEmployeeByLoginCode(loginCode: string): Promise<Employee | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM employees WHERE loginCode = ?',
+      loginCode
+    );
+
+    return row ? this.rowToEmployee(row) : null;
+  }
+
+  async getEmployeesPaginated(
+    page: number,
+    pageSize: number,
+    filters?: {
+      name?: string;
+      employeeNumber?: string;
+      realName?: string;
+    },
+    orderBy?: string,
+    orderDirection?: 'ASC' | 'DESC'
+  ): Promise<PaginationResult<Employee>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const builder = new QueryBuilder('employees');
+    builder.select('*');
+
+    if (filters) {
+      if (filters.name) {
+        builder.where('name LIKE ?', `%${filters.name}%`);
+      }
+      if (filters.employeeNumber) {
+        builder.where('employeeNumber LIKE ?', `%${filters.employeeNumber}%`);
+      }
+      if (filters.realName) {
+        builder.where('realName LIKE ?', `%${filters.realName}%`);
+      }
+    }
+
+    builder.orderBy(orderBy || 'createdAt', orderDirection || 'DESC');
+    builder.paginate(page, pageSize);
+
+    const query = builder.buildQuery();
+    const countQuery = builder.buildCountQuery();
+
+    const [rows, countResult] = await Promise.all([
+      this.db.all(query.sql, ...query.params),
+      this.db.get(countQuery.sql, ...countQuery.params)
+    ]);
+
+    const total = countResult.count;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      items: rows.map(row => this.rowToEmployee(row)),
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  async updateEmployee(id: string, updatedData: Partial<Employee>): Promise<Employee | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existingEmployee = await this.getEmployeeById(id);
+    if (!existingEmployee) return null;
+
+    // 如果更新登录码，检查是否与其他员工冲突
+    if (updatedData.loginCode && updatedData.loginCode !== existingEmployee.loginCode) {
+      const existingByCode = await this.db.get(
+        'SELECT * FROM employees WHERE loginCode = ? AND id != ?',
+        updatedData.loginCode,
+        id
+      );
+      if (existingByCode) {
+        throw new Error('登录码已被其他员工使用');
+      }
+    }
+
+    // 如果更新员工编号，检查是否与其他员工冲突
+    if (updatedData.employeeNumber && updatedData.employeeNumber !== existingEmployee.employeeNumber) {
+      const existingByNumber = await this.db.get(
+        'SELECT * FROM employees WHERE employeeNumber = ? AND id != ?',
+        updatedData.employeeNumber,
+        id
+      );
+      if (existingByNumber) {
+        throw new Error('员工编号已被其他员工使用');
+      }
+    }
+
+    // 如果更新手机号，检查是否与其他员工冲突
+    if (updatedData.phone && updatedData.phone !== existingEmployee.phone) {
+      const existingByPhone = await this.db.get(
+        'SELECT * FROM employees WHERE phone = ? AND id != ?',
+        updatedData.phone,
+        id
+      );
+      if (existingByPhone) {
+        throw new Error('手机号已被其他员工使用');
+      }
+    }
+
+    // 处理密码哈希
+    const dataToUpdate = { ...updatedData };
+    if (dataToUpdate.password) {
+      dataToUpdate.password = this.hashPassword(dataToUpdate.password);
+    }
+
+    const fields = Object.keys(dataToUpdate).filter(key =>
+      key !== 'id' && key !== 'createdAt'
+    );
+
+    if (fields.length === 0) return existingEmployee;
+
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const values = fields.map(field => dataToUpdate[field as keyof typeof dataToUpdate]);
+
+    await this.db.run(
+      `UPDATE employees SET ${setClause} WHERE id = ?`,
+      ...values, id
+    );
+
+    return this.getEmployeeById(id);
+  }
+
+  async updateEmployeeLoginTime(id: string): Promise<Employee | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+
+    await this.db.run(
+      'UPDATE employees SET lastLoginTime = ? WHERE id = ?',
+      now,
+      id
+    );
+
+    return this.getEmployeeById(id);
+  }
+
+  async deleteEmployee(id: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM employees WHERE id = ?',
+      id
+    );
+
+    return result.changes ? result.changes > 0 : false;
+  }
+
+  // 获取下一个员工编号的数字部分
+  async getNextEmployeeNumberSuffix(): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // 查询所有员工编号，提取数字部分找到最大值
+    const rows = await this.db.all(
+      'SELECT employeeNumber FROM employees'
+    );
+
+    let maxNumber = 9999; // 起始值为9999，这样第一个编号会是10000
+
+    for (const row of rows) {
+      const employeeNumber = row.employeeNumber as string;
+      // 提取编号中的数字部分（最后的连续数字）
+      const match = employeeNumber.match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNumber) {
+          maxNumber = num;
+        }
+      }
+    }
+
+    return maxNumber + 1;
+  }
+
+  private rowToEmployee(row: any): Employee {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      employeeNumber: row.employeeNumber,
+      name: row.name,
+      realName: row.realName,
+      phone: row.phone || '',
+      password: row.password || '',
+      loginCode: row.loginCode,
+      lastLoginTime: row.lastLoginTime || undefined
+    };
+  }
+
+  // 通过手机号和密码验证员工登录
+  async validateEmployeeByPhone(phone: string, password: string): Promise<Employee | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const hashedPassword = this.hashPassword(password);
+
+    const row = await this.db.get(
+      'SELECT * FROM employees WHERE phone = ? AND password = ?',
+      phone,
+      hashedPassword
+    );
+
+    if (!row) return null;
+
+    // 更新最后登录时间
+    await this.updateEmployeeLoginTime(row.id);
+
+    return this.rowToEmployee(row);
+  }
+
+  // 通过手机号获取员工（不验证密码）
+  async getEmployeeByPhone(phone: string): Promise<Employee | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM employees WHERE phone = ?',
+      phone
+    );
+
+    return row ? this.rowToEmployee(row) : null;
+  }
+
+  // 公开的密码哈希方法（用于API层）
+  hashEmployeePassword(password: string): string {
+    return this.hashPassword(password);
+  }
+
+  // ==================== Operation Logs (操作日志) ====================
+
+  async insertOperationLog(log: OperationLogFormData): Promise<OperationLog> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const id = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
+    const createdAt = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT INTO operation_logs (
+        id, createdAt, targetTable, targetId, action,
+        operatorType, operatorId, operatorName,
+        fieldName, oldValue, newValue, changeDetail, remark
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      createdAt,
+      log.targetTable,
+      log.targetId,
+      log.action,
+      log.operatorType,
+      log.operatorId,
+      log.operatorName,
+      log.fieldName || null,
+      log.oldValue || null,
+      log.newValue || null,
+      log.changeDetail || null,
+      log.remark || null
+    );
+
+    return {
+      id,
+      createdAt,
+      ...log
+    };
+  }
+
+  async getOperationLogById(id: string): Promise<OperationLog | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM operation_logs WHERE id = ?',
+      id
+    );
+
+    return row ? this.rowToOperationLog(row) : null;
+  }
+
+  async getOperationLogsPaginated(
+    page: number,
+    pageSize: number,
+    filters?: {
+      targetTable?: string;
+      targetId?: string;
+      action?: string;
+      operatorType?: string;
+      operatorId?: string;
+      operatorName?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+    orderBy?: string,
+    orderDirection?: 'ASC' | 'DESC'
+  ): Promise<PaginationResult<OperationLog>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const builder = new QueryBuilder('operation_logs');
+    builder.select('*');
+
+    if (filters) {
+      if (filters.targetTable) {
+        builder.where('targetTable = ?', filters.targetTable);
+      }
+      if (filters.targetId) {
+        builder.where('targetId = ?', filters.targetId);
+      }
+      if (filters.action) {
+        builder.where('action = ?', filters.action);
+      }
+      if (filters.operatorType) {
+        builder.where('operatorType = ?', filters.operatorType);
+      }
+      if (filters.operatorId) {
+        builder.where('operatorId = ?', filters.operatorId);
+      }
+      if (filters.operatorName) {
+        builder.where('operatorName LIKE ?', `%${filters.operatorName}%`);
+      }
+      if (filters.startDate) {
+        builder.where('createdAt >= ?', filters.startDate);
+      }
+      if (filters.endDate) {
+        builder.where('createdAt <= ?', filters.endDate + 'T23:59:59.999Z');
+      }
+    }
+
+    builder.orderBy(orderBy || 'createdAt', orderDirection || 'DESC');
+    builder.paginate(page, pageSize);
+
+    const query = builder.buildQuery();
+    const countQuery = builder.buildCountQuery();
+
+    const [rows, countResult] = await Promise.all([
+      this.db.all(query.sql, ...query.params),
+      this.db.get(countQuery.sql, ...countQuery.params)
+    ]);
+
+    const total = countResult.count;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      items: rows.map(row => this.rowToOperationLog(row)),
+      total,
+      page,
+      pageSize,
+      totalPages
+    };
+  }
+
+  // 获取某条记录的所有操作日志
+  async getOperationLogsByTarget(targetTable: string, targetId: string): Promise<OperationLog[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT * FROM operation_logs WHERE targetTable = ? AND targetId = ? ORDER BY createdAt DESC',
+      targetTable,
+      targetId
+    );
+
+    return rows.map(row => this.rowToOperationLog(row));
+  }
+
+  // 删除操作日志（通常不建议删除，仅用于特殊情况）
+  async deleteOperationLog(id: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM operation_logs WHERE id = ?',
+      id
+    );
+
+    return result.changes ? result.changes > 0 : false;
+  }
+
+  // 清理指定天数之前的日志
+  async cleanOldOperationLogs(daysToKeep: number): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+    const cutoffDateStr = cutoffDate.toISOString();
+
+    const result = await this.db.run(
+      'DELETE FROM operation_logs WHERE createdAt < ?',
+      cutoffDateStr
+    );
+
+    return result.changes || 0;
+  }
+
+  private rowToOperationLog(row: any): OperationLog {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      targetTable: row.targetTable,
+      targetId: row.targetId,
+      action: row.action,
+      operatorType: row.operatorType,
+      operatorId: row.operatorId,
+      operatorName: row.operatorName,
+      fieldName: row.fieldName || undefined,
+      oldValue: row.oldValue || undefined,
+      newValue: row.newValue || undefined,
+      changeDetail: row.changeDetail || undefined,
+      remark: row.remark || undefined
     };
   }
 

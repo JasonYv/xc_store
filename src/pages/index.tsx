@@ -9,13 +9,14 @@ export default function HomePage() {
   
   useEffect(() => {
     setMounted(true);
-    
+
     // 检查登录状态
     const isAuthenticated = localStorage.getItem('isAuthenticated');
     if (isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   if (!mounted) {
     return (

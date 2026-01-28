@@ -10,6 +10,9 @@ import {
   LogOut,
   ShoppingCart,
   Package,
+  PackageX,
+  UserCog,
+  FileText,
 } from "lucide-react"
 
 import {
@@ -32,14 +35,17 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 
-const navItems = [
+// 基础管理
+const baseNavItems = [
   {
     title: "首页",
     url: "/dashboard",
@@ -59,6 +65,34 @@ const navItems = [
     title: "订单管理",
     url: "/dashboard/orders",
     icon: Package,
+  },
+]
+
+// 仓储管理
+const warehouseNavItems = [
+  {
+    title: "当日送货",
+    url: "/dashboard/daily-deliveries",
+    icon: Package,
+  },
+  {
+    title: "余货/客退",
+    url: "/dashboard/return-details",
+    icon: PackageX,
+  },
+  {
+    title: "操作日志",
+    url: "/dashboard/operation-logs",
+    icon: FileText,
+  },
+]
+
+// 系统管理
+const systemNavItems = [
+  {
+    title: "员工管理",
+    url: "/dashboard/employees",
+    icon: UserCog,
   },
   {
     title: "管理员",
@@ -134,10 +168,58 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        {/* 基础管理 */}
         <SidebarGroup>
+          <SidebarGroupLabel>基础管理</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {baseNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    tooltip={item.title}
+                    onClick={() => router.push(item.url)}
+                    isActive={isPathActive(item.url)}
+                  >
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* 仓储管理 */}
+        <SidebarGroup>
+          <SidebarGroupLabel>仓储管理</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {warehouseNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    tooltip={item.title}
+                    onClick={() => router.push(item.url)}
+                    isActive={isPathActive(item.url)}
+                  >
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* 系统管理 */}
+        <SidebarGroup>
+          <SidebarGroupLabel>系统管理</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {systemNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     tooltip={item.title}

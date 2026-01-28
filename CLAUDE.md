@@ -36,7 +36,15 @@ npm run deploy
 
 1. **SQLite 数据库** (`src/lib/sqlite-db.ts`) - 主要数据存储
    - 位置: `data/merchants.db`
-   - 包含两个主表: `merchants` 和 `users`
+   - 主要表结构:
+     - `merchants` - 商家信息
+     - `users` - 用户账号
+     - `products` - 商品信息
+     - `product_sales_orders` - 商品销售订单
+     - `daily_deliveries` - 当日送货记录
+     - `return_details` - 余货/客退明细
+     - `employees` - 员工信息
+     - `settings` - 系统设置
    - 支持从 JSON 文件自动迁移数据
    - 默认管理员账号: `admin` / `19131421a..0`
 
@@ -65,6 +73,12 @@ npm run deploy
 - `POST /api/auth` - 用户登录
 - `/api/merchants` - 商家 CRUD 操作 (GET, POST, PUT, DELETE)
 - `/api/users` - 用户管理 (GET, POST, PUT, DELETE)
+- `/api/products` - 商品管理 (GET, POST, PUT, DELETE)
+- `/api/orders` - 订单管理 (GET, POST, PUT, DELETE)
+- `/api/daily-deliveries` - 当日送货管理 (GET, POST, PUT, DELETE)
+- `/api/return-details` - 余货/客退明细管理 (GET, POST, PUT, DELETE)
+- `/api/employees` - 员工管理 (GET, POST, PUT, DELETE)
+- `POST /api/employee-login` - 员工登录
 - `/api/merchants/send-message` - 发送企业微信消息
 
 **公开 API** (需 API Key):
@@ -83,9 +97,15 @@ API Key 配置在 `src/config/index.ts`,通过环境变量 `API_KEY` 或默认�
 ### 类型系统
 
 核心类型定义在 `src/lib/types.ts`:
-- `Merchant` - 商家信息(包含 id, createdAt, name, warehouse1/2, defaultWarehouse, groupName, sendMessage)
+- `Merchant` - 商家信息
 - `User` - 用户账号
+- `Product` - 商品信息
+- `ProductSalesOrder` - 商品销售订单
+- `DailyDelivery` - 当日送货记录
+- `ReturnDetail` - 余货/客退明细
+- `Employee` - 员工信息
 - `ApiResponse<T>` - 标准 API 响应格式
+- `PaginationParams` 和 `PaginationResult<T>` - 分页相关类型
 
 ### UI 组件库
 
@@ -167,3 +187,74 @@ SQLite 使用 INTEGER (0/1) 存储布尔值:
 1. 默认管理员账号在 `src/lib/sqlite-db.ts` 的 `createDefaultAdmin()` 方法中定义
 2. 密码哈希逻辑在 `hashPassword()` 方法中
 3. 认证验证在 `/api/auth` 端点中
+
+## 新增功能模块
+
+### 1. 当日送货管理 (Daily Deliveries)
+
+数据表: `daily_deliveries`
+
+字段说明:
+- `id`: 主键
+- `merchantName`: 商家名称
+- `productName`: 商品名称
+- `unit`: 单位
+- `dispatchQuantity`: 派单数量
+- `estimatedSales`: 预估销售
+- `distributionStatus`: 配货状态 (0=未配货, 1=已配货, 3=改配)
+- `warehousingStatus`: 入库状态 (0=未入库, 1=已入库)
+- `entryUser`: 录入人
+- `operators`: 操作人列表 (JSON 字符串数组)
+- `deliveryDate`: 日期 (YYYY-MM-DD)
+
+API 端点: `/api/daily-deliveries`
+- 支持分页查询、创建、更新、删除
+- 可按商家名称、商品名称、日期、状态筛选
+- 数据库索引: deliveryDate, merchantName, productName, distributionStatus+warehousingStatus
+
+### 2. 余货/客退明细 (Return Details)
+
+数据表: `return_details`
+
+字段说明:
+- `id`: 主键
+- `merchantName`: 商家名称
+- `productName`: 商品名称
+- `unit`: 单位
+- `actualReturnQuantity`: 实际退库数量
+- `goodQuantity`: 正品数量
+- `defectiveQuantity`: 残品数量
+- `retrievalStatus`: 取回状态 (0=未取回, 1=已取回)
+- `retrievedGoodQuantity`: 取回正品数
+- `retrievedDefectiveQuantity`: 取回残品数
+- `entryUser`: 录入人
+- `operators`: 操作人列表 (JSON 字符串数组)
+- `returnDate`: 日期 (YYYY-MM-DD)
+
+API 端点: `/api/return-details`
+- 支持分页查询、创建、更新、删除
+- 可按商家名称、商品名称、日期、取回状态筛选
+- 数据库索引: returnDate, merchantName, productName, retrievalStatus
+
+### 3. 员工管理 (Employees)
+
+数据表: `employees`
+
+字段说明:
+- `id`: 主键
+- `employeeNumber`: 员工编号 (唯一)
+- `name`: 员工名字
+- `realName`: 真实姓名
+- `loginCode`: 登录码 (8位英文数字大写, 唯一)
+- `lastLoginTime`: 最后登录时间
+
+API 端点:
+- `/api/employees` - 员工 CRUD 操作
+- `POST /api/employee-login` - 员工登录 (使用登录码)
+
+登录码规则:
+- 必须是8位字符
+- 仅包含大写字母 A-Z 和数字 0-9
+- 示例: `ABC12345`, `XYZ99999`
+
+详细 API 文档请参考: `API-NEW-FEATURES.md`
