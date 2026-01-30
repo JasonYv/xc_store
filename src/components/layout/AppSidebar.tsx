@@ -13,6 +13,7 @@ import {
   PackageX,
   UserCog,
   FileText,
+  ImagePlus,
 } from "lucide-react"
 
 import {
@@ -79,6 +80,11 @@ const warehouseNavItems = [
     title: "余货/客退",
     url: "/dashboard/return-details",
     icon: PackageX,
+  },
+  {
+    title: "图片水印",
+    url: "/dashboard/watermark",
+    icon: ImagePlus,
   },
   {
     title: "操作日志",

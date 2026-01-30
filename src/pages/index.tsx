@@ -45,6 +45,18 @@ export default function HomePage() {
       <div className="relative z-10 w-2/5">
         <LoginForm />
       </div>
+
+      {/* 备案号 */}
+      <div className="absolute bottom-4 left-0 right-0 z-10 text-center">
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+        >
+          陕ICP备2023007060号-1
+        </a>
+      </div>
     </div>
   );
 }
