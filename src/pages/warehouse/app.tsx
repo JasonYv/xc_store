@@ -23,6 +23,22 @@ import {
 } from 'lucide-react';
 import { DailyDelivery, ReturnDetail, DataTypes } from '@/lib/types';
 
+// Cookie 操作工具函数
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+function setCookie(name: string, value: string, days: number) {
+  const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+}
+
 // 带商品图片的送货记录类型
 interface DailyDeliveryWithImage extends DailyDelivery {
   productImage?: string;
@@ -137,23 +153,50 @@ export default function WarehouseApp() {
     }
   }, [showCalculator]);
 
-  // 检查登录状态
+  // 检查登录状态（优先 Cookie，然后 localStorage）
   useEffect(() => {
-    const employeeData = localStorage.getItem('warehouseEmployee');
-    if (!employeeData) {
-      router.replace('/warehouse');
-      return;
-    }
+    const checkAuth = () => {
+      // 先检查 Cookie
+      const cookieData = getCookie('warehouseEmployee');
+      if (cookieData) {
+        try {
+          const parsed = JSON.parse(cookieData);
+          if (parsed && parsed.id) {
+            // 同步到 localStorage
+            localStorage.setItem('warehouseEmployee', cookieData);
+            setEmployee(parsed);
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          // Cookie 数据无效
+        }
+      }
 
-    try {
-      const parsed = JSON.parse(employeeData);
-      setEmployee(parsed);
-    } catch (err) {
+      // 再检查 localStorage
+      const localData = localStorage.getItem('warehouseEmployee');
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          if (parsed && parsed.id) {
+            // 同步到 Cookie（续期30天）
+            setCookie('warehouseEmployee', localData, 30);
+            setEmployee(parsed);
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          // localStorage 数据无效
+        }
+      }
+
+      // 都没有有效数据，跳转登录
       localStorage.removeItem('warehouseEmployee');
+      deleteCookie('warehouseEmployee');
       router.replace('/warehouse');
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    checkAuth();
   }, [router]);
 
   // 获取未配货列表（分拣）
@@ -267,6 +310,7 @@ export default function WarehouseApp() {
   const handleLogout = () => {
     if (confirm('确定要退出登录吗？')) {
       localStorage.removeItem('warehouseEmployee');
+      deleteCookie('warehouseEmployee');
       router.replace('/warehouse');
     }
   };

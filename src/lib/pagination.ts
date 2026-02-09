@@ -83,6 +83,14 @@ export class QueryBuilder {
   }
 
   /**
+   * 设置原始排序（支持多字段）
+   */
+  orderByRaw(rawOrderBy: string): QueryBuilder {
+    this.orderByClause = `ORDER BY ${rawOrderBy}`;
+    return this;
+  }
+
+  /**
    * 设置分页
    */
   paginate(page: number, pageSize: number): QueryBuilder {

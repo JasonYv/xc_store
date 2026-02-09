@@ -468,6 +468,7 @@ export default function ReturnDetailsPage() {
                 placeholder="搜索商家"
                 value={filters.merchantName}
                 onChange={(e) => setFilters({...filters, merchantName: e.target.value})}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
             <div>
@@ -476,6 +477,7 @@ export default function ReturnDetailsPage() {
                 placeholder="搜索商品"
                 value={filters.productName}
                 onChange={(e) => setFilters({...filters, productName: e.target.value})}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
             <div>

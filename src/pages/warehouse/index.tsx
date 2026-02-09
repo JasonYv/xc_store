@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
@@ -13,6 +13,17 @@ import {
   Loader2
 } from 'lucide-react';
 
+// Cookie 操作工具函数
+function setCookie(name: string, value: string, days: number) {
+  const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
 export default function WarehouseLogin() {
   const router = useRouter();
   const [loginType, setLoginType] = useState<'phone' | 'code'>('phone');
@@ -22,6 +33,48 @@ export default function WarehouseLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // 检查已登录状态，自动跳转
+  useEffect(() => {
+    const checkAuth = () => {
+      // 先检查 Cookie
+      const cookieData = getCookie('warehouseEmployee');
+      if (cookieData) {
+        try {
+          const employee = JSON.parse(cookieData);
+          if (employee && employee.id) {
+            // 同步到 localStorage
+            localStorage.setItem('warehouseEmployee', cookieData);
+            router.replace('/warehouse/app');
+            return;
+          }
+        } catch (e) {
+          // Cookie 数据无效，忽略
+        }
+      }
+
+      // 再检查 localStorage
+      const localData = localStorage.getItem('warehouseEmployee');
+      if (localData) {
+        try {
+          const employee = JSON.parse(localData);
+          if (employee && employee.id) {
+            // 同步到 Cookie
+            setCookie('warehouseEmployee', localData, 30);
+            router.replace('/warehouse/app');
+            return;
+          }
+        } catch (e) {
+          // localStorage 数据无效，忽略
+        }
+      }
+
+      setCheckingAuth(false);
+    };
+
+    checkAuth();
+  }, [router]);
 
   const handlePhoneLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,8 +102,10 @@ export default function WarehouseLogin() {
       const data = await res.json();
 
       if (data.success) {
-        // 保存员工信息到 localStorage
-        localStorage.setItem('warehouseEmployee', JSON.stringify(data.data));
+        // 保存员工信息到 localStorage 和 Cookie（30天有效期）
+        const employeeJson = JSON.stringify(data.data);
+        localStorage.setItem('warehouseEmployee', employeeJson);
+        setCookie('warehouseEmployee', employeeJson, 30);
         router.push('/warehouse/app');
       } else {
         setError(data.error || '登录失败');
@@ -88,7 +143,9 @@ export default function WarehouseLogin() {
       const data = await res.json();
 
       if (data.success) {
-        localStorage.setItem('warehouseEmployee', JSON.stringify(data.data));
+        const employeeJson = JSON.stringify(data.data);
+        localStorage.setItem('warehouseEmployee', employeeJson);
+        setCookie('warehouseEmployee', employeeJson, 30);
         router.push('/warehouse/app');
       } else {
         setError(data.error || '登录失败');
@@ -99,6 +156,15 @@ export default function WarehouseLogin() {
       setIsLoading(false);
     }
   };
+
+  // 检查登录状态时显示加载
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex flex-col">

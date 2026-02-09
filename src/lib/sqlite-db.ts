@@ -1644,7 +1644,12 @@ export class SqliteDatabase {
       }
     }
 
-    builder.orderBy(orderBy || 'createdAt', orderDirection || 'DESC');
+    // 默认按送货日期倒序，同一天内按创建时间倒序
+    if (orderBy) {
+      builder.orderBy(orderBy, orderDirection || 'DESC');
+    } else {
+      builder.orderByRaw('deliveryDate DESC, createdAt DESC');
+    }
     builder.paginate(page, pageSize);
 
     const query = builder.buildQuery();
