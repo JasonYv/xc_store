@@ -125,14 +125,15 @@ export default function WarehouseApp() {
     setTimeout(() => piecesInputRef.current?.focus(), 100);
   };
 
-  // 搜索过滤函数：商品名称模糊匹配
+  // 搜索过滤函数：商品名称和商家名称模糊匹配
   const filterBySearch = useCallback((list: DailyDeliveryWithImage[], keyword: string): DailyDeliveryWithImage[] => {
     if (!keyword.trim()) return list;
 
     const searchTerm = keyword.trim().toLowerCase();
 
     return list.filter(item => {
-      return item.productName.toLowerCase().includes(searchTerm);
+      return item.productName.toLowerCase().includes(searchTerm) ||
+             item.merchantName.toLowerCase().includes(searchTerm);
     });
   }, []);
 
