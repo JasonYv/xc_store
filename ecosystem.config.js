@@ -9,6 +9,7 @@ module.exports = {
       PORT: 3001,
       BASE_URL: 'https://admin.leapdeer.com',
       API_KEY: 'n4MBvJIdx9htUbkU0d8fpsJ7pM8bV4',
+      WORKTOOL_CALLBACK_TOKEN: 'wt_cb_9f3a7c1e2b5d406a',
       ADMIN_USERNAME: 'admin',
       ADMIN_PASSWORD: 'admin123'
     },
