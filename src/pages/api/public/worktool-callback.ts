@@ -29,9 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const spoken = String(body.spoken ?? '').trim();
     const groupName = String(body.groupName ?? '').trim();
 
-    // 过滤：仅群(1/3) + 文本(1) + 精确触发词
+    // 过滤：仅群(1/3) + 文本(1) + 精确触发词 + 群名非空
+    // 群名为空则忽略：避免空字符串误匹配到 groupName 未配置(同为空)的商家
     const isGroup = roomType === 1 || roomType === 3;
-    if (!isGroup || textType !== 1 || spoken !== TRIGGER_KEYWORD) {
+    if (!isGroup || textType !== 1 || spoken !== TRIGGER_KEYWORD || !groupName) {
       return res.status(200).json({ code: 0, message: 'success' });
     }
 
