@@ -2449,6 +2449,7 @@ export class SqliteDatabase {
       operatorType?: string;
       operatorId?: string;
       operatorName?: string;
+      remark?: string;
       startDate?: string;
       endDate?: string;
     },
@@ -2479,6 +2480,9 @@ export class SqliteDatabase {
       }
       if (filters.operatorName) {
         builder.where('operatorName LIKE ?', `%${filters.operatorName}%`);
+      }
+      if (filters.remark) {
+        builder.where('remark LIKE ?', `%${filters.remark}%`);
       }
       if (filters.startDate) {
         builder.where('createdAt >= ?', filters.startDate);

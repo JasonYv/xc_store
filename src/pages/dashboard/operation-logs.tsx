@@ -42,6 +42,7 @@ export default function OperationLogsPage() {
     action: 'all',
     operatorType: 'all',
     operatorName: '',
+    remark: '',
     startDate: '',
     endDate: ''
   });
@@ -77,6 +78,9 @@ export default function OperationLogsPage() {
       }
       if (filters.operatorName) {
         params.append('operatorName', filters.operatorName);
+      }
+      if (filters.remark) {
+        params.append('remark', filters.remark);
       }
       if (filters.startDate) {
         params.append('startDate', filters.startDate);
@@ -250,6 +254,14 @@ export default function OperationLogsPage() {
                 placeholder="搜索操作人"
                 value={filters.operatorName}
                 onChange={(e) => setFilters({...filters, operatorName: e.target.value})}
+              />
+            </div>
+            <div>
+              <Label>备注</Label>
+              <Input
+                placeholder="模糊搜索备注"
+                value={filters.remark}
+                onChange={(e) => setFilters({...filters, remark: e.target.value})}
               />
             </div>
             <div>

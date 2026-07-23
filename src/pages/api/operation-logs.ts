@@ -26,6 +26,7 @@ export default async function handler(
           operatorType,
           operatorId,
           operatorName,
+          remark,
           startDate,
           endDate
         } = req.query;
@@ -66,6 +67,7 @@ export default async function handler(
           operatorType?: string;
           operatorId?: string;
           operatorName?: string;
+          remark?: string;
           startDate?: string;
           endDate?: string;
         } = {};
@@ -75,6 +77,7 @@ export default async function handler(
         if (operatorType && typeof operatorType === 'string') filters.operatorType = operatorType;
         if (operatorId && typeof operatorId === 'string') filters.operatorId = operatorId;
         if (operatorName && typeof operatorName === 'string') filters.operatorName = operatorName;
+        if (remark && typeof remark === 'string') filters.remark = remark;
         if (startDate && typeof startDate === 'string') filters.startDate = startDate;
         if (endDate && typeof endDate === 'string') filters.endDate = endDate;
 
