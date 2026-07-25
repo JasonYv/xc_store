@@ -82,20 +82,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
 
       if (existingProduct) {
-        // 商品已存在,更新商品信息
+        // 商品已存在,更新商品信息（高频同步接口，不逐条打日志避免刷屏）
         await db.updateProduct(existingProduct.id, {
           pinduoduoProductImage: productData.pinduoduoProductImage,
           pinduoduoProductName: productData.pinduoduoProductName,
           productSpec: productData.productSpec
         });
-        console.log(`更新商品: productId=${productId}, merchant=${merchant.name}`);
       } else {
         // 商品不存在,新增商品
         await db.insertProduct(productData);
-        console.log(`新增商品: productId=${productId}, merchant=${merchant.name}`);
       }
     } else {
-      console.log(`未找到店铺ID为 ${shopId} 的商家`);
+      // 店铺未匹配到商家属于配置问题，保留告警
+      console.warn(`未找到店铺ID为 ${shopId} 的商家`);
     }
 
     // 准备订单数据

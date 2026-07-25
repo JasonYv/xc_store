@@ -25,7 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { id, pinduoduoShopId, pinduoduoName } = req.body;
-    console.log('接收到的请求体:', req.body);
 
     // 验证必填参数（系统商家ID）
     if (!id) {
@@ -49,15 +48,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (pinduoduoShopId !== undefined) {
       updateData.pinduoduoShopId = pinduoduoShopId;
-      console.log('更新 pinduoduoShopId:', pinduoduoShopId);
     }
 
     if (pinduoduoName !== undefined) {
       updateData.pinduoduoName = pinduoduoName;
-      console.log('更新 pinduoduoName:', pinduoduoName);
     }
-
-    console.log('最终更新数据:', updateData);
 
     // 检查是否有字段需要更新
     if (Object.keys(updateData).length === 0) {
