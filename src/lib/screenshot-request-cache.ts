@@ -140,3 +140,16 @@ export function complete(merchantId: string): boolean {
   sweep(Date.now());
   return store().delete(merchantId);
 }
+
+// 向后兼容：旧采集端按 groupName 回报时，移除该群下所有请求（一个群可能多个账号）。
+// 返回移除条数。
+export function completeByGroup(groupName: string): number {
+  sweep(Date.now());
+  const map = store();
+  const toDelete: string[] = [];
+  map.forEach((req, key) => {
+    if (req.groupName === groupName) toDelete.push(key);
+  });
+  toDelete.forEach((key) => map.delete(key));
+  return toDelete.length;
+}
