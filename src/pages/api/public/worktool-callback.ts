@@ -46,10 +46,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ code: 0, message: 'success' });
     }
 
-    matched.forEach((m) => enqueue(m));
-    console.log(
-      `[worktool-callback] 已入队 ${matched.length} 个商家的发图请求：群 ${groupName}（${matched.map((m) => m.name).join('、')}）`
-    );
+    const results = matched.map((m) => ({ name: m.name, result: enqueue(m) }));
+    const enqueued = results.filter((r) => r.result === 'enqueued').map((r) => r.name);
+    const skipped = results.filter((r) => r.result !== 'enqueued').map((r) => r.name);
+    if (enqueued.length > 0) {
+      console.log(`[worktool-callback] 已入队 ${enqueued.length} 个商家发图请求：群 ${groupName}（${enqueued.join('、')}）`);
+    }
+    if (skipped.length > 0) {
+      // 冷却中/在途重复 → 忽略，防止 WorkTool 回调重放/连发导致重复截图
+      console.log(`[worktool-callback] 忽略 ${skipped.length} 个重复/冷却中的发图请求：群 ${groupName}（${skipped.join('、')}）`);
+    }
     return res.status(200).json({ code: 0, message: 'success' });
   } catch (error) {
     console.error('[worktool-callback] 处理回调出错:', error);
