@@ -15,10 +15,14 @@ export interface ScreenshotRequest {
   status: RequestStatus;
   requestedAt: number;  // 首次入队时间戳(ms)
   updatedAt: number;    // 最近更新时间戳(ms)
+  attempts: number;     // 已被采集端领取(下发)的次数，用于封顶防止无限重发
 }
 
 const PROCESSING_TTL = 5 * 60 * 1000;  // processing 超 5min 退回 pending
 const REQUEST_TTL = 10 * 60 * 1000;    // pending 超 10min 作废
+// 单条请求最多被下发的次数。正常一次即完成；若回报一直失败（如契约不匹配/网络），
+// 达到上限后直接丢弃，避免「回报失败→TTL 退回→再截图」的无限循环刷屏群。
+const MAX_CLAIM_ATTEMPTS = 2;
 
 // 挂在 globalThis 上，避免 Next.js dev 热重载丢失；生产单进程 fork 天然单例。
 const globalForCache = globalThis as unknown as {
@@ -64,6 +68,7 @@ export function enqueue(merchant: Merchant): void {
     status: 'pending',
     requestedAt: now,
     updatedAt: now,
+    attempts: 0,
   });
 }
 
@@ -73,13 +78,24 @@ export function claimPending(): ScreenshotRequest[] {
   sweep(now);
   const map = store();
   const claimed: ScreenshotRequest[] = [];
-  map.forEach((req) => {
+  const toDelete: string[] = [];
+  map.forEach((req, key) => {
     if (req.status === 'pending') {
+      // 已达下发上限（回报一直没成功）→ 丢弃，不再下发，防止无限重发刷屏
+      if (req.attempts >= MAX_CLAIM_ATTEMPTS) {
+        toDelete.push(key);
+        console.warn(
+          `[screenshot-cache] 请求已达下发上限(${MAX_CLAIM_ATTEMPTS})，丢弃：${req.merchantName} / ${req.groupName}（回报可能一直失败，检查采集端与服务端版本是否匹配）`
+        );
+        return;
+      }
       req.status = 'processing';
+      req.attempts += 1;
       req.updatedAt = now;
       claimed.push({ ...req });
     }
   });
+  toDelete.forEach((key) => map.delete(key));
   return claimed;
 }
 
