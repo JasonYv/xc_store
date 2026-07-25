@@ -9,6 +9,10 @@ const nextConfig = {
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
   },
   reactStrictMode: true,
+  // 启用 instrumentation.ts（Next 14 需显式开启），用于服务端日志加时间戳
+  experimental: {
+    instrumentationHook: true,
+  },
   typescript: {
     ignoreBuildErrors: false,
   },
