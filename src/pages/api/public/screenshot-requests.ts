@@ -26,12 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ success: true, data, total: data.length });
     }
 
-    // POST：回报完成
-    const groupName = String(req.body?.groupName ?? '').trim();
-    if (!groupName) {
-      return res.status(400).json({ success: false, error: '缺少 groupName' });
+    // POST：回报完成（按 merchantId，因为一个群可能有多个账号）
+    const merchantId = String(req.body?.merchantId ?? '').trim();
+    if (!merchantId) {
+      return res.status(400).json({ success: false, error: '缺少 merchantId' });
     }
-    const removed = complete(groupName);
+    const removed = complete(merchantId);
     return res.status(200).json({ success: true, removed });
   } catch (error) {
     console.error('[screenshot-requests] 处理出错:', error);

@@ -3,13 +3,15 @@ import { Merchant } from '@/lib/types';
 // 「机器人发图」请求的内存缓存。
 // 生命周期：pending →(采集端拉取)processing →(采集端回报成功)移除。
 // 兜底：processing 超 PROCESSING_TTL 退回 pending 重试；pending 超 REQUEST_TTL 作废。
+// 缓存 key = merchantId（不是 groupName）：一个群可能对应多个商家账号，
+// 按账号去重，才能保证同群下每个账号各截一张图、互不覆盖。
 
 export type RequestStatus = 'pending' | 'processing';
 
 export interface ScreenshotRequest {
-  merchantId: string;   // merchant.id（采集端 account_data.api_id）
+  merchantId: string;   // merchant.id（采集端 account_data.api_id）（缓存 key）
   merchantName: string; // merchant.name
-  groupName: string;    // merchant.groupName（缓存 key）
+  groupName: string;    // merchant.groupName（截图发送目标群）
   status: RequestStatus;
   requestedAt: number;  // 首次入队时间戳(ms)
   updatedAt: number;    // 最近更新时间戳(ms)
@@ -34,28 +36,28 @@ function store(): Map<string, ScreenshotRequest> {
 function sweep(now: number): void {
   const map = store();
   const toDelete: string[] = [];
-  map.forEach((req, groupName) => {
+  map.forEach((req, key) => {
     if (req.status === 'processing' && now - req.updatedAt > PROCESSING_TTL) {
       req.status = 'pending';
       req.updatedAt = now;
     } else if (req.status === 'pending' && now - req.requestedAt > REQUEST_TTL) {
-      toDelete.push(groupName);
+      toDelete.push(key);
     }
   });
-  toDelete.forEach((groupName) => map.delete(groupName));
+  toDelete.forEach((key) => map.delete(key));
 }
 
-// 入队。同群已存在(pending/processing)时只刷新 updatedAt（合并去重）。
+// 入队（按 merchantId）。同账号已存在(pending/processing)时只刷新 updatedAt（合并去重）。
 export function enqueue(merchant: Merchant): void {
   const now = Date.now();
   sweep(now);
   const map = store();
-  const existing = map.get(merchant.groupName);
+  const existing = map.get(merchant.id);
   if (existing) {
     existing.updatedAt = now;
     return;
   }
-  map.set(merchant.groupName, {
+  map.set(merchant.id, {
     merchantId: merchant.id,
     merchantName: merchant.name,
     groupName: merchant.groupName,
@@ -81,8 +83,8 @@ export function claimPending(): ScreenshotRequest[] {
   return claimed;
 }
 
-// 采集端回报发送成功，移除该条。返回是否命中。
-export function complete(groupName: string): boolean {
+// 采集端回报发送成功，按 merchantId 移除该条。返回是否命中。
+export function complete(merchantId: string): boolean {
   sweep(Date.now());
-  return store().delete(groupName);
+  return store().delete(merchantId);
 }
