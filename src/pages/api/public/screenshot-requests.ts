@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import db from '@/lib/sqlite-db';
-import { claimPending, complete } from '@/lib/screenshot-request-cache';
+import { claimPending, complete, completeByGroup } from '@/lib/screenshot-request-cache';
 
 // 采集端接口：
 // GET  拉取待发图请求（pending → processing）
@@ -26,13 +26,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ success: true, data, total: data.length });
     }
 
-    // POST：回报完成（按 merchantId，因为一个群可能有多个账号）
+    // POST：回报完成。优先按 merchantId（新采集端）；
+    // 兼容旧采集端按 groupName 回报 → 移除该群下所有请求。
     const merchantId = String(req.body?.merchantId ?? '').trim();
-    if (!merchantId) {
-      return res.status(400).json({ success: false, error: '缺少 merchantId' });
+    const groupName = String(req.body?.groupName ?? '').trim();
+    if (merchantId) {
+      const removed = complete(merchantId);
+      return res.status(200).json({ success: true, removed });
     }
-    const removed = complete(merchantId);
-    return res.status(200).json({ success: true, removed });
+    if (groupName) {
+      const removedCount = completeByGroup(groupName);
+      return res.status(200).json({ success: true, removed: removedCount > 0, removedCount });
+    }
+    return res.status(400).json({ success: false, error: '缺少 merchantId 或 groupName' });
   } catch (error) {
     console.error('[screenshot-requests] 处理出错:', error);
     return res.status(500).json({
