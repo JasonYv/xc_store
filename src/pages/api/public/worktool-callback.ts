@@ -36,18 +36,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ code: 0, message: 'success' });
     }
 
-    // 匹配商家
+    // 匹配商家：一个群可能对应多个账号，全部入队（各截一张图发到该群）
     await db.init();
     const merchants = await db.getAllMerchants();
-    const merchant = merchants.find((m: Merchant) => m.groupName === groupName);
+    const matched = merchants.filter((m: Merchant) => m.groupName === groupName);
 
-    if (!merchant) {
+    if (matched.length === 0) {
       console.warn(`[worktool-callback] 未匹配到商家，群名: ${groupName}`);
       return res.status(200).json({ code: 0, message: 'success' });
     }
 
-    enqueue(merchant);
-    console.log(`[worktool-callback] 已入队发图请求：${merchant.name} / ${groupName}`);
+    matched.forEach((m) => enqueue(m));
+    console.log(
+      `[worktool-callback] 已入队 ${matched.length} 个商家的发图请求：群 ${groupName}（${matched.map((m) => m.name).join('、')}）`
+    );
     return res.status(200).json({ code: 0, message: 'success' });
   } catch (error) {
     console.error('[worktool-callback] 处理回调出错:', error);
