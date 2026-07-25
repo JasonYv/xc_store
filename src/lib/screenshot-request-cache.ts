@@ -5,8 +5,15 @@ import { Merchant } from '@/lib/types';
 // 兜底：processing 超 PROCESSING_TTL 退回 pending 重试；pending 超 REQUEST_TTL 作废。
 // 缓存 key = merchantId（不是 groupName）：一个群可能对应多个商家账号，
 // 按账号去重，才能保证同群下每个账号各截一张图、互不覆盖。
+//
+// 三层防刷屏（缺一不可）：
+// 1) 入队冷却：同一商家 COOLDOWN_MS 内只接受一次发图请求。抵挡 WorkTool 回调重放/
+//    重启积压/用户连发导致的洪水式重复触发（这是最外层、最关键的一层）。
+// 2) 下发上限：单条请求最多被下发 MAX_CLAIM_ATTEMPTS 次，回报持续失败也不会无限重发。
+// 3) TTL 兜底：processing/pending 超时的清理，避免请求卡死或长期堆积。
 
 export type RequestStatus = 'pending' | 'processing';
+export type EnqueueResult = 'enqueued' | 'refreshed' | 'cooldown';
 
 export interface ScreenshotRequest {
   merchantId: string;   // merchant.id（采集端 account_data.api_id）（缓存 key）
@@ -18,15 +25,15 @@ export interface ScreenshotRequest {
   attempts: number;     // 已被采集端领取(下发)的次数，用于封顶防止无限重发
 }
 
-const PROCESSING_TTL = 5 * 60 * 1000;  // processing 超 5min 退回 pending
-const REQUEST_TTL = 10 * 60 * 1000;    // pending 超 10min 作废
-// 单条请求最多被下发的次数。正常一次即完成；若回报一直失败（如契约不匹配/网络），
-// 达到上限后直接丢弃，避免「回报失败→TTL 退回→再截图」的无限循环刷屏群。
-const MAX_CLAIM_ATTEMPTS = 2;
+const PROCESSING_TTL = 5 * 60 * 1000;   // processing 超 5min 退回 pending
+const REQUEST_TTL = 10 * 60 * 1000;     // pending 超 10min 作废
+const MAX_CLAIM_ATTEMPTS = 2;           // 单条请求最多下发次数
+const COOLDOWN_MS = 3 * 60 * 1000;      // 同一商家两次发图请求的最小间隔（冷却窗口）
 
 // 挂在 globalThis 上，避免 Next.js dev 热重载丢失；生产单进程 fork 天然单例。
 const globalForCache = globalThis as unknown as {
   __screenshotRequestCache__?: Map<string, ScreenshotRequest>;
+  __screenshotLastServed__?: Map<string, number>; // merchantId -> 最近一次派发(领取)截图的时间戳
 };
 
 function store(): Map<string, ScreenshotRequest> {
@@ -36,7 +43,15 @@ function store(): Map<string, ScreenshotRequest> {
   return globalForCache.__screenshotRequestCache__;
 }
 
-// 每次读写前调用：处理 TTL 兜底。
+// merchantId -> 最近一次真正派发截图的时间戳（用于冷却判断；请求删除后仍保留一段时间）
+function lastServedStore(): Map<string, number> {
+  if (!globalForCache.__screenshotLastServed__) {
+    globalForCache.__screenshotLastServed__ = new Map<string, number>();
+  }
+  return globalForCache.__screenshotLastServed__;
+}
+
+// 每次读写前调用：处理 TTL 兜底 + 清理过期的冷却记录。
 function sweep(now: number): void {
   const map = store();
   const toDelete: string[] = [];
@@ -49,18 +64,36 @@ function sweep(now: number): void {
     }
   });
   toDelete.forEach((key) => map.delete(key));
+
+  // 清理过期冷却记录，避免无限增长
+  const served = lastServedStore();
+  const staleServed: string[] = [];
+  served.forEach((ts, key) => {
+    if (now - ts > COOLDOWN_MS) staleServed.push(key);
+  });
+  staleServed.forEach((key) => served.delete(key));
 }
 
-// 入队（按 merchantId）。同账号已存在(pending/processing)时只刷新 updatedAt（合并去重）。
-export function enqueue(merchant: Merchant): void {
+// 入队（按 merchantId）。返回：
+// - 'refreshed'：该商家已有在途请求(pending/processing) → 只刷新 updatedAt，不新增。
+// - 'cooldown' ：距上次派发截图不足 COOLDOWN_MS → 忽略本次（防重复触发刷屏）。
+// - 'enqueued' ：新建了一条待处理请求。
+export function enqueue(merchant: Merchant): EnqueueResult {
   const now = Date.now();
   sweep(now);
   const map = store();
+
   const existing = map.get(merchant.id);
   if (existing) {
     existing.updatedAt = now;
-    return;
+    return 'refreshed';
   }
+
+  const lastServedAt = lastServedStore().get(merchant.id);
+  if (lastServedAt !== undefined && now - lastServedAt < COOLDOWN_MS) {
+    return 'cooldown';
+  }
+
   map.set(merchant.id, {
     merchantId: merchant.id,
     merchantName: merchant.name,
@@ -70,6 +103,7 @@ export function enqueue(merchant: Merchant): void {
     updatedAt: now,
     attempts: 0,
   });
+  return 'enqueued';
 }
 
 // 取所有 pending，标记 processing 后返回（采集端拉取）。
@@ -77,6 +111,7 @@ export function claimPending(): ScreenshotRequest[] {
   const now = Date.now();
   sweep(now);
   const map = store();
+  const served = lastServedStore();
   const claimed: ScreenshotRequest[] = [];
   const toDelete: string[] = [];
   map.forEach((req, key) => {
@@ -92,6 +127,7 @@ export function claimPending(): ScreenshotRequest[] {
       req.status = 'processing';
       req.attempts += 1;
       req.updatedAt = now;
+      served.set(req.merchantId, now); // 记录派发时间，用于后续冷却
       claimed.push({ ...req });
     }
   });
