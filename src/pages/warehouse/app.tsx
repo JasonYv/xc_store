@@ -19,8 +19,14 @@ import {
   RefreshCw,
   Calculator,
   X,
-  Equal
+  Equal,
+  Download,
+  QrCode,
+  Copy,
+  Check
 } from 'lucide-react';
+import QRCode from 'qrcode';
+import { APP_DOWNLOAD_PAGE } from '@/config/app-download';
 import { DailyDelivery, ReturnDetail, DataTypes } from '@/lib/types';
 
 // Cookie 操作工具函数
@@ -103,6 +109,12 @@ export default function WarehouseApp() {
   const [calcPerBox, setCalcPerBox] = useState<string>(''); // 箱归
   const [calcRemainder, setCalcRemainder] = useState<string>(''); // 尾数
 
+  // 下载 APP 弹窗状态
+  const [showDownload, setShowDownload] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [downloadQr, setDownloadQr] = useState('');
+  const [urlCopied, setUrlCopied] = useState(false);
+
   // 输入框引用，用于快速跳转
   const piecesInputRef = useRef<HTMLInputElement>(null);
   const perBoxInputRef = useRef<HTMLInputElement>(null);
@@ -146,6 +158,30 @@ export default function WarehouseApp() {
       item.merchantName.toLowerCase().includes(searchTerm)
     );
   }, []);
+
+  // 打开下载弹窗时生成二维码（内容是当前域名下的下载页地址）
+  useEffect(() => {
+    if (!showDownload || downloadQr) return;
+
+    const url = `${window.location.origin}${APP_DOWNLOAD_PAGE}`;
+    setDownloadUrl(url);
+
+    QRCode.toDataURL(url, { width: 480, margin: 1, errorCorrectionLevel: 'M' })
+      .then(setDownloadQr)
+      .catch(() => setDownloadQr(''));
+  }, [showDownload, downloadQr]);
+
+  // 复制下载链接，2 秒后恢复按钮文案
+  const handleCopyDownloadUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(downloadUrl);
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 2000);
+    } catch {
+      // 非 HTTPS 或旧浏览器没有剪贴板权限，让用户长按选中链接
+      window.prompt('复制下载链接：', downloadUrl);
+    }
+  };
 
   // 计算器打开时自动聚焦第一个输入框
   useEffect(() => {
@@ -539,7 +575,7 @@ export default function WarehouseApp() {
         <div className="flex justify-between items-center mb-2">
           <h1 className="text-xl font-bold">仓库作业系统</h1>
           <div className="text-blue-100 text-sm flex items-center gap-2">
-            操作员: {employee.employeeNumber}
+            操作员: {employee.name || employee.realName}({employee.employeeNumber})
             {status === 'on_duty' && <span className="inline-block w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>}
           </div>
         </div>
@@ -878,6 +914,23 @@ export default function WarehouseApp() {
               <ArrowRight className="w-5 h-5" />
             </button>
 
+            {/* Download APP Button */}
+            <button
+              onClick={() => setShowDownload(true)}
+              className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl shadow-lg active:scale-[0.98] transition-all mb-6"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <Download className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold">下载 APP</div>
+                  <div className="text-white/70 text-xs">扫码安装安卓 / iOS 版</div>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5" />
+            </button>
+
             {/* Logout Button */}
             <button
               onClick={handleLogout}
@@ -1089,6 +1142,70 @@ export default function WarehouseApp() {
       )}
 
       {/* Calculator Modal */}
+      {/* 下载 APP 弹窗：二维码 + 链接 */}
+      {showDownload && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowDownload(false)} />
+
+          <div className="relative w-full max-w-lg bg-white rounded-t-3xl px-6 pt-6 pb-12 animate-slide-up">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-300 rounded-full" />
+
+            <div className="flex items-center justify-between mb-6 pt-4">
+              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <QrCode className="w-6 h-6 text-emerald-600" />
+                下载 APP
+              </h3>
+              <button
+                onClick={() => setShowDownload(false)}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center">
+              {downloadQr ? (
+                <img
+                  src={downloadQr}
+                  alt="APP 下载二维码"
+                  className="w-56 h-56 rounded-2xl border border-slate-200"
+                />
+              ) : (
+                <div className="w-56 h-56 rounded-2xl border border-slate-200 flex items-center justify-center">
+                  <Loader2 className="w-7 h-7 animate-spin text-slate-300" />
+                </div>
+              )}
+
+              <p className="text-sm text-slate-500 mt-4 text-center leading-relaxed">
+                用手机扫码打开下载页，会自动识别安卓 / iOS
+                <br />
+                <span className="text-amber-600 font-semibold">微信里扫码请按提示用浏览器打开</span>
+              </p>
+
+              {/* 链接 + 复制，扫码不方便时可直接发给别人 */}
+              <div className="w-full mt-5 flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="flex-1 text-xs text-slate-500 font-mono break-all">{downloadUrl}</span>
+                <button
+                  onClick={handleCopyDownloadUrl}
+                  className="shrink-0 h-9 px-3 rounded-lg bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 active:scale-95 transition-all"
+                >
+                  {urlCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {urlCopied ? '已复制' : '复制'}
+                </button>
+              </div>
+
+              <button
+                onClick={() => window.open(APP_DOWNLOAD_PAGE, '_blank')}
+                className="w-full mt-3 h-12 border-2 border-emerald-500 text-emerald-600 font-bold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] active:bg-emerald-50 transition-all"
+              >
+                <Download className="w-5 h-5" />
+                在本机直接下载
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCalculator && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center">
           {/* Backdrop */}

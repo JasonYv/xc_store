@@ -52,3 +52,8 @@ data/merchants.db-wal
 
 # uploads
 /public/uploads/
+
+# APP 安装包（体积大，不进版本库；部署时手动放到 public/app/）
+/public/app/*.apk
+/public/app/*.ipa
+/public/app/*.mobileconfig
