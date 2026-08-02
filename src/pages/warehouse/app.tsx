@@ -23,7 +23,9 @@ import {
   Download,
   QrCode,
   Copy,
-  Check
+  Check,
+  Lock,
+  ShieldAlert
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { APP_DOWNLOAD_PAGE } from '@/config/app-download';
@@ -104,6 +106,15 @@ export default function WarehouseApp() {
   const [searchKeyword, setSearchKeyword] = useState('');
 
   // 计算器状态
+  // 修改密码
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [pwdSubmitting, setPwdSubmitting] = useState(false);
+  const [pwdError, setPwdError] = useState('');
+  // 改成功后展示的新登录码。旧码立刻失效，员工没记住就再登不进来，必须强提示
+  const [newLoginCode, setNewLoginCode] = useState('');
+
   const [showCalculator, setShowCalculator] = useState(false);
   const [calcPieces, setCalcPieces] = useState<string>(''); // 件数
   const [calcPerBox, setCalcPerBox] = useState<string>(''); // 箱归
@@ -349,6 +360,65 @@ export default function WarehouseApp() {
       localStorage.removeItem('warehouseEmployee');
       deleteCookie('warehouseEmployee');
       router.replace('/warehouse');
+    }
+  };
+
+  // 关闭修改密码弹窗，顺手清掉输入，避免下次打开还留着上次的内容
+  const closeChangePwd = () => {
+    setShowChangePwd(false);
+    setNewPwd('');
+    setConfirmPwd('');
+    setPwdError('');
+  };
+
+  const handleChangePassword = async () => {
+    if (!employee) return;
+
+    if (!newPwd || !confirmPwd) {
+      setPwdError('请填写新密码并确认');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setPwdError('两次输入的密码不一致');
+      return;
+    }
+    // 与后端同一套规则，先在前端拦一道，省一次往返
+    if (!/^(?=.*[A-Za-z])(?=.*\d)\S{8,}$/.test(newPwd)) {
+      setPwdError('密码至少8位，且必须同时包含字母和数字');
+      return;
+    }
+
+    setPwdSubmitting(true);
+    setPwdError('');
+    try {
+      const res = await fetch(`/api/public/employee-change-password?t=${Date.now()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // 已经用登录码登录了，走免验旧密码这条路
+        body: JSON.stringify({ loginCode: employee.loginCode, newPassword: newPwd })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        setPwdError(data.error || '修改失败');
+        return;
+      }
+
+      // 登录码已经换了，本地存的那份必须同步，否则页面上还显示旧码、下次进来也用不了
+      const updated = { ...employee, loginCode: data.data.loginCode };
+      setEmployee(updated);
+      const json = JSON.stringify(updated);
+      localStorage.setItem('warehouseEmployee', json);
+      setCookie('warehouseEmployee', json, 30);
+
+      setShowChangePwd(false);
+      setNewPwd('');
+      setConfirmPwd('');
+      setNewLoginCode(data.data.loginCode);
+    } catch (e) {
+      setPwdError('网络错误，请重试');
+    } finally {
+      setPwdSubmitting(false);
     }
   };
 
@@ -931,6 +1001,15 @@ export default function WarehouseApp() {
               <ArrowRight className="w-5 h-5" />
             </button>
 
+            {/* 修改密码 */}
+            <button
+              onClick={() => setShowChangePwd(true)}
+              className="w-full h-12 border-2 border-slate-300 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] active:bg-slate-50"
+            >
+              <Lock className="w-5 h-5" />
+              修改密码
+            </button>
+
             {/* Logout Button */}
             <button
               onClick={handleLogout}
@@ -1202,6 +1281,126 @@ export default function WarehouseApp() {
                 在本机直接下载
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 修改密码 */}
+      {showChangePwd && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={closeChangePwd} />
+
+          <div className="relative w-full max-w-lg bg-white rounded-t-3xl px-6 pt-6 pb-12 animate-slide-up">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-300 rounded-full" />
+
+            <div className="flex items-center justify-between mb-6 pt-4">
+              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Lock className="w-6 h-6 text-blue-600" />
+                修改密码
+              </h3>
+              <button
+                onClick={closeChangePwd}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 当前登录码：方便员工改前先核对 */}
+            <div className="mb-5 p-4 bg-slate-50 rounded-xl">
+              <div className="text-xs text-slate-500 mb-1">当前登录码</div>
+              <div className="text-lg font-bold text-slate-900 tracking-widest">
+                {employee?.loginCode}
+              </div>
+            </div>
+
+            {/* 改完会换登录码，这件事必须让员工改之前就知道 */}
+            <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl flex gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800 leading-relaxed">
+                修改密码后<span className="font-bold">登录码会同时更换</span>，
+                旧登录码立即失效。请务必记下新的登录码。
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">新密码</label>
+                <input
+                  type="password"
+                  value={newPwd}
+                  onChange={(e) => { setNewPwd(e.target.value); setPwdError(''); }}
+                  placeholder="至少8位，含字母和数字"
+                  className="w-full h-12 px-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">确认新密码</label>
+                <input
+                  type="password"
+                  value={confirmPwd}
+                  onChange={(e) => { setConfirmPwd(e.target.value); setPwdError(''); }}
+                  placeholder="再输入一次"
+                  className="w-full h-12 px-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {pwdError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                {pwdError}
+              </div>
+            )}
+
+            <button
+              onClick={handleChangePassword}
+              disabled={pwdSubmitting}
+              className="w-full h-12 bg-blue-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
+            >
+              {pwdSubmitting ? (
+                <><Loader2 className="w-5 h-5 animate-spin" />提交中…</>
+              ) : '确认修改'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 新登录码：必须点确认才能关，否则员工记不住就登不进来了 */}
+      {newLoginCode && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/60" />
+
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+              <Check className="w-9 h-9 text-green-600" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">密码修改成功</h3>
+            <p className="text-sm text-slate-500 mb-5">
+              登录码已更换，旧登录码已失效。<br />请记下新的登录码：
+            </p>
+
+            <div className="mb-2 p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl">
+              <div className="text-3xl font-bold text-blue-700 tracking-[0.2em]">
+                {newLoginCode}
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(newLoginCode);
+              }}
+              className="mb-5 text-sm text-blue-600 font-medium inline-flex items-center gap-1"
+            >
+              <Copy className="w-4 h-4" />
+              复制登录码
+            </button>
+
+            <button
+              onClick={() => setNewLoginCode('')}
+              className="w-full h-12 bg-blue-600 text-white font-bold rounded-xl active:scale-[0.98]"
+            >
+              我已记下
+            </button>
           </div>
         </div>
       )}

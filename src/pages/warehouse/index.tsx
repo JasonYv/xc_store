@@ -10,7 +10,11 @@ import {
   EyeOff,
   LogIn,
   UserPlus,
-  Loader2
+  Loader2,
+  ShieldAlert,
+  Check,
+  Copy,
+  X
 } from 'lucide-react';
 
 // Cookie 操作工具函数
@@ -30,6 +34,15 @@ export default function WarehouseLogin() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loginCode, setLoginCode] = useState('');
+
+  // 忘记密码：用登录码重设密码，成功后会拿到新的登录码
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotPwd, setForgotPwd] = useState('');
+  const [forgotConfirm, setForgotConfirm] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSubmitting, setForgotSubmitting] = useState(false);
+  const [forgotNewCode, setForgotNewCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -114,6 +127,63 @@ export default function WarehouseLogin() {
       setError('网络错误，请稍后重试');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const closeForgot = () => {
+    setShowForgot(false);
+    setForgotCode('');
+    setForgotPwd('');
+    setForgotConfirm('');
+    setForgotError('');
+  };
+
+  // 用登录码重设密码。登录码本身就是身份凭证，所以不需要旧密码
+  const handleForgotPassword = async () => {
+    const code = forgotCode.trim().toUpperCase();
+
+    if (!code || !forgotPwd || !forgotConfirm) {
+      setForgotError('请填写登录码和新密码');
+      return;
+    }
+    if (!/^[A-Z0-9]{8}$/.test(code)) {
+      setForgotError('登录码必须是8位大写字母和数字');
+      return;
+    }
+    if (forgotPwd !== forgotConfirm) {
+      setForgotError('两次输入的密码不一致');
+      return;
+    }
+    // 与后端同一套规则，先在前端拦一道
+    if (!/^(?=.*[A-Za-z])(?=.*\d)\S{8,}$/.test(forgotPwd)) {
+      setForgotError('密码至少8位，且必须同时包含字母和数字');
+      return;
+    }
+
+    setForgotSubmitting(true);
+    setForgotError('');
+    try {
+      const res = await fetch(`/api/public/employee-change-password?t=${Date.now()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginCode: code, newPassword: forgotPwd })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        setForgotError(data.error || '修改失败');
+        return;
+      }
+
+      setShowForgot(false);
+      setForgotCode('');
+      setForgotPwd('');
+      setForgotConfirm('');
+      setForgotNewCode(data.data.loginCode);
+    } catch (err) {
+      setForgotError('网络错误，请重试');
+    } finally {
+      setForgotSubmitting(false);
     }
   };
 
@@ -309,6 +379,16 @@ export default function WarehouseLogin() {
           </form>
         )}
 
+        {/* 忘记密码：用登录码重设 */}
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => setShowForgot(true)}
+            className="text-sm text-slate-500 active:text-blue-600"
+          >
+            忘记密码？用登录码重设
+          </button>
+        </div>
+
         {/* Register Link */}
         <div className="mt-8 text-center">
           <p className="text-slate-500 text-sm mb-3">还没有账号？</p>
@@ -321,6 +401,121 @@ export default function WarehouseLogin() {
           </button>
         </div>
       </div>
+
+      {/* 忘记密码弹窗 */}
+      {showForgot && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/60" onClick={closeForgot} />
+
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-blue-600" />
+                用登录码重设密码
+              </h3>
+              <button
+                onClick={closeForgot}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 改完会换登录码，改之前就要让人知道 */}
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 leading-relaxed">
+                重设后<span className="font-bold">登录码会同时更换</span>，旧登录码立即失效，
+                请务必记下新的登录码。
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <input
+                type="text"
+                value={forgotCode}
+                onChange={(e) => { setForgotCode(e.target.value.toUpperCase()); setForgotError(''); }}
+                placeholder="当前登录码（8位）"
+                maxLength={8}
+                className="w-full h-12 px-4 border border-slate-200 rounded-xl tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="password"
+                value={forgotPwd}
+                onChange={(e) => { setForgotPwd(e.target.value); setForgotError(''); }}
+                placeholder="新密码（至少8位，含字母和数字）"
+                className="w-full h-12 px-4 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="password"
+                value={forgotConfirm}
+                onChange={(e) => { setForgotConfirm(e.target.value); setForgotError(''); }}
+                placeholder="确认新密码"
+                className="w-full h-12 px-4 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {forgotError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                {forgotError}
+              </div>
+            )}
+
+            <button
+              onClick={handleForgotPassword}
+              disabled={forgotSubmitting}
+              className="w-full h-12 bg-blue-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
+            >
+              {forgotSubmitting ? (
+                <><Loader2 className="w-5 h-5 animate-spin" />提交中…</>
+              ) : '确认重设'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 新登录码：必须点确认才能关 */}
+      {forgotNewCode && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/60" />
+
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+              <Check className="w-9 h-9 text-green-600" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">密码重设成功</h3>
+            <p className="text-sm text-slate-500 mb-5">
+              登录码已更换，旧登录码已失效。<br />请记下新的登录码：
+            </p>
+
+            <div className="mb-2 p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl">
+              <div className="text-3xl font-bold text-blue-700 tracking-[0.2em]">
+                {forgotNewCode}
+              </div>
+            </div>
+
+            <button
+              onClick={() => navigator.clipboard?.writeText(forgotNewCode)}
+              className="mb-5 text-sm text-blue-600 font-medium inline-flex items-center gap-1"
+            >
+              <Copy className="w-4 h-4" />
+              复制登录码
+            </button>
+
+            <button
+              onClick={() => {
+                // 顺手把新登录码填进登录框，员工可以直接登录
+                setLoginCode(forgotNewCode);
+                setLoginType('code');
+                setForgotNewCode('');
+              }}
+              className="w-full h-12 bg-blue-600 text-white font-bold rounded-xl active:scale-[0.98]"
+            >
+              我已记下，去登录
+            </button>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .pb-safe-area-inset-bottom {
