@@ -1,10 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import db from '@/lib/sqlite-db';
-import { claimPending, complete, completeByGroup } from '@/lib/screenshot-request-cache';
+import { claimPending, complete, completeByGroup, DEFAULT_KIND, RequestKind } from '@/lib/screenshot-request-cache';
 
 // 采集端接口：
-// GET  拉取待发图请求（pending → processing）
-// POST 回报发送完成（按 groupName 移除）
+// GET  拉取待处理的群指令请求（pending → processing），每条带 kind：screenshot / dispatch
+// POST 回报完成（按 merchantId + kind；老采集端按 groupName，只清发图请求）
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.setHeader('Allow', ['GET', 'POST']);
@@ -27,11 +27,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // POST：回报完成。优先按 merchantId（新采集端）；
-    // 兼容旧采集端按 groupName 回报 → 移除该群下所有请求。
+    // 兼容旧采集端按 groupName 回报 → 移除该群下所有发图请求。
     const merchantId = String(req.body?.merchantId ?? '').trim();
     const groupName = String(req.body?.groupName ?? '').trim();
+    // kind 缺省 screenshot：老采集端不带这个字段，它只处理发图
+    const rawKind = String(req.body?.kind ?? '').trim();
+    const kind: RequestKind =
+      rawKind === 'dispatch' || rawKind === 'screenshot' ? rawKind : DEFAULT_KIND;
     if (merchantId) {
-      const removed = complete(merchantId);
+      const removed = complete(merchantId, kind);
       return res.status(200).json({ success: true, removed });
     }
     if (groupName) {

@@ -1,10 +1,11 @@
 import { Merchant } from '@/lib/types';
 
-// 「机器人发图」请求的内存缓存。
+// 群指令请求的内存缓存，目前两种：「机器人发图」和「生成派单表」。
 // 生命周期：pending →(采集端拉取)processing →(采集端回报成功)移除。
 // 兜底：processing 超 PROCESSING_TTL 退回 pending 重试；pending 超 REQUEST_TTL 作废。
-// 缓存 key = merchantId（不是 groupName）：一个群可能对应多个商家账号，
-// 按账号去重，才能保证同群下每个账号各截一张图、互不覆盖。
+// 缓存 key = kind + merchantId（不是 groupName）：一个群可能对应多个商家账号，
+// 按账号去重，才能保证同群下每个账号各出一份、互不覆盖；再按 kind 分开，
+// 发图和派单表是两件事，冷却与去重都不该互相牵连。
 //
 // 三层防刷屏（缺一不可）：
 // 1) 入队冷却：同一商家 COOLDOWN_MS 内只接受一次发图请求。抵挡 WorkTool 回调重放/
@@ -14,11 +15,16 @@ import { Merchant } from '@/lib/types';
 
 export type RequestStatus = 'pending' | 'processing';
 export type EnqueueResult = 'enqueued' | 'refreshed' | 'cooldown';
+// screenshot=汇总表截图，发回触发指令的群；dispatch=派单表，固定发到采集端配置的通知群
+export type RequestKind = 'screenshot' | 'dispatch';
+
+export const DEFAULT_KIND: RequestKind = 'screenshot';
 
 export interface ScreenshotRequest {
-  merchantId: string;   // merchant.id（采集端 account_data.api_id）（缓存 key）
+  merchantId: string;   // merchant.id（采集端 account_data.api_id）
   merchantName: string; // merchant.name
-  groupName: string;    // merchant.groupName（截图发送目标群）
+  groupName: string;    // merchant.groupName（触发指令的群；截图回发到这里）
+  kind: RequestKind;    // 指令类型（与 merchantId 共同构成缓存 key）
   status: RequestStatus;
   requestedAt: number;  // 首次入队时间戳(ms)
   updatedAt: number;    // 最近更新时间戳(ms)
@@ -43,12 +49,17 @@ function store(): Map<string, ScreenshotRequest> {
   return globalForCache.__screenshotRequestCache__;
 }
 
-// merchantId -> 最近一次真正派发截图的时间戳（用于冷却判断；请求删除后仍保留一段时间）
+// cacheKey -> 最近一次真正派发的时间戳（用于冷却判断；请求删除后仍保留一段时间）
 function lastServedStore(): Map<string, number> {
   if (!globalForCache.__screenshotLastServed__) {
     globalForCache.__screenshotLastServed__ = new Map<string, number>();
   }
   return globalForCache.__screenshotLastServed__;
+}
+
+// 缓存 key：同一商家的发图与派单表是两条独立请求，不能互相顶掉
+function cacheKey(merchantId: string, kind: RequestKind): string {
+  return `${kind}:${merchantId}`;
 }
 
 // 每次读写前调用：处理 TTL 兜底 + 清理过期的冷却记录。
@@ -74,30 +85,32 @@ function sweep(now: number): void {
   staleServed.forEach((key) => served.delete(key));
 }
 
-// 入队（按 merchantId）。返回：
-// - 'refreshed'：该商家已有在途请求(pending/processing) → 只刷新 updatedAt，不新增。
-// - 'cooldown' ：距上次派发截图不足 COOLDOWN_MS → 忽略本次（防重复触发刷屏）。
+// 入队（按 merchantId + kind）。返回：
+// - 'refreshed'：该商家同类请求已在途(pending/processing) → 只刷新 updatedAt，不新增。
+// - 'cooldown' ：距上次派发同类请求不足 COOLDOWN_MS → 忽略本次（防重复触发刷屏）。
 // - 'enqueued' ：新建了一条待处理请求。
-export function enqueue(merchant: Merchant): EnqueueResult {
+export function enqueue(merchant: Merchant, kind: RequestKind = DEFAULT_KIND): EnqueueResult {
   const now = Date.now();
   sweep(now);
   const map = store();
+  const key = cacheKey(merchant.id, kind);
 
-  const existing = map.get(merchant.id);
+  const existing = map.get(key);
   if (existing) {
     existing.updatedAt = now;
     return 'refreshed';
   }
 
-  const lastServedAt = lastServedStore().get(merchant.id);
+  const lastServedAt = lastServedStore().get(key);
   if (lastServedAt !== undefined && now - lastServedAt < COOLDOWN_MS) {
     return 'cooldown';
   }
 
-  map.set(merchant.id, {
+  map.set(key, {
     merchantId: merchant.id,
     merchantName: merchant.name,
     groupName: merchant.groupName,
+    kind,
     status: 'pending',
     requestedAt: now,
     updatedAt: now,
@@ -120,14 +133,14 @@ export function claimPending(): ScreenshotRequest[] {
       if (req.attempts >= MAX_CLAIM_ATTEMPTS) {
         toDelete.push(key);
         console.warn(
-          `[screenshot-cache] 请求已达下发上限(${MAX_CLAIM_ATTEMPTS})，丢弃：${req.merchantName} / ${req.groupName}（回报可能一直失败，检查采集端与服务端版本是否匹配）`
+          `[screenshot-cache] 请求已达下发上限(${MAX_CLAIM_ATTEMPTS})，丢弃：${req.kind} / ${req.merchantName} / ${req.groupName}（回报可能一直失败，检查采集端与服务端版本是否匹配）`
         );
         return;
       }
       req.status = 'processing';
       req.attempts += 1;
       req.updatedAt = now;
-      served.set(req.merchantId, now); // 记录派发时间，用于后续冷却
+      served.set(key, now); // 记录派发时间，用于后续冷却
       claimed.push({ ...req });
     }
   });
@@ -135,20 +148,22 @@ export function claimPending(): ScreenshotRequest[] {
   return claimed;
 }
 
-// 采集端回报发送成功，按 merchantId 移除该条。返回是否命中。
-export function complete(merchantId: string): boolean {
+// 采集端回报发送成功，按 merchantId + kind 移除该条。返回是否命中。
+// kind 缺省为 screenshot：老采集端不带 kind，它只会处理发图请求。
+export function complete(merchantId: string, kind: RequestKind = DEFAULT_KIND): boolean {
   sweep(Date.now());
-  return store().delete(merchantId);
+  return store().delete(cacheKey(merchantId, kind));
 }
 
-// 向后兼容：旧采集端按 groupName 回报时，移除该群下所有请求（一个群可能多个账号）。
+// 向后兼容：旧采集端按 groupName 回报时，移除该群下所有发图请求（一个群可能多个账号）。
+// 只清 screenshot：老采集端不认识派单表请求，不能让它的回报把派单表请求一起抹掉。
 // 返回移除条数。
 export function completeByGroup(groupName: string): number {
   sweep(Date.now());
   const map = store();
   const toDelete: string[] = [];
   map.forEach((req, key) => {
-    if (req.groupName === groupName) toDelete.push(key);
+    if (req.groupName === groupName && req.kind === 'screenshot') toDelete.push(key);
   });
   toDelete.forEach((key) => map.delete(key));
   return toDelete.length;
