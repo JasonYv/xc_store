@@ -12,6 +12,13 @@ import { Merchant } from '@/lib/types';
 //    重启积压/用户连发导致的洪水式重复触发（这是最外层、最关键的一层）。
 // 2) 下发上限：单条请求最多被下发 MAX_CLAIM_ATTEMPTS 次，回报持续失败也不会无限重发。
 // 3) TTL 兜底：processing/pending 超时的清理，避免请求卡死或长期堆积。
+//
+// PROCESSING_TTL 的计时起点：claimPending() 一次性把当批 pending 全标成 processing，
+// updatedAt 统一盖成「拉取时刻」。但采集端是按并发上限排队消费的，排在后面的请求
+// 在真正开始处理前也会被这个时钟计时——纯排队等待会被误判成「卡死」而回收重发，
+// 严重时甚至在真正跑完前就把 attempts 配额耗光被静默丢弃。
+// 用 touch()（采集端真正开始处理某条时调用）把计时起点改成「实际开始处理」而不是
+// 「被拉取」，排队多久不再影响判断，只有真正处理中卡死才会触发 TTL 回收。
 
 export type RequestStatus = 'pending' | 'processing';
 export type EnqueueResult = 'enqueued' | 'refreshed' | 'cooldown';
@@ -31,7 +38,7 @@ export interface ScreenshotRequest {
   attempts: number;     // 已被采集端领取(下发)的次数，用于封顶防止无限重发
 }
 
-const PROCESSING_TTL = 5 * 60 * 1000;   // processing 超 5min 退回 pending
+const PROCESSING_TTL = 8 * 60 * 1000;   // processing 超 8min 退回 pending（心跳之后只需覆盖单条真实处理时长，留够余量）
 const REQUEST_TTL = 10 * 60 * 1000;     // pending 超 10min 作废
 const MAX_CLAIM_ATTEMPTS = 2;           // 单条请求最多下发次数
 const COOLDOWN_MS = 3 * 60 * 1000;      // 同一商家两次发图请求的最小间隔（冷却窗口）
@@ -146,6 +153,18 @@ export function claimPending(): ScreenshotRequest[] {
   });
   toDelete.forEach((key) => map.delete(key));
   return claimed;
+}
+
+// 心跳：采集端真正开始处理某条请求时调用，只刷新 updatedAt，不改变状态。
+// 只对仍处于 processing 的请求生效——若已被 TTL 回收成 pending（说明服务端判定
+// 上一次已经卡死）或已被删除（已完成/已丢弃），心跳直接忽略，不做任何改动。
+// 返回是否命中（未命中只代表心跳晚到，不代表异常，调用方不必关心）。
+export function touch(merchantId: string, kind: RequestKind = DEFAULT_KIND): boolean {
+  const map = store();
+  const req = map.get(cacheKey(merchantId, kind));
+  if (!req || req.status !== 'processing') return false;
+  req.updatedAt = Date.now();
+  return true;
 }
 
 // 采集端回报发送成功，按 merchantId + kind 移除该条。返回是否命中。
