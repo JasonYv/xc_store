@@ -28,6 +28,11 @@ npm run export
 npm run deploy
 ```
 
+> **`npm run lint` 实际不可用**：`next lint` 认不出仓库里的 `eslint.config.mjs`
+> （flat config，ESLint 9 风格；仓库装的是 eslint 8），会转成交互式询问卡住。
+> 验证代码请用 `npx tsc --noEmit -p tsconfig.json` + `npm run build`——
+> build 配置里 `eslint.ignoreDuringBuilds: false`，该报的会报。
+
 ## 核心架构
 
 ### 数据库架构
@@ -61,13 +66,41 @@ npm run deploy
 
 ### 认证系统
 
+**内部后台（云仓自用）**：
 - 使用 Next.js Middleware (`src/middleware.ts`) 进行路由保护
 - 通过 Cookie `isAuthenticated` 判断登录状态
 - 受保护路由: `/dashboard/*`
 - 公开路由: `/` (登录页)
 - 密码使用 SHA-256 哈希存储
 
+⚠️ **这套是"假的"**：`isAuthenticated` 只是个由前端写入的布尔 cookie，服务端从不校验
+（浏览器里手写 `document.cookie='isAuthenticated=true'` 即可进入），且所有内部 `/api/*`
+没有任何鉴权。内网自用够用，但**绝对不能把这套后台暴露在对外域名上**——
+这就是下面「租户域名封锁」存在的原因。
+
+**租户控制台（2026-09-16 新增，可对外）**：
+- 真登录：`/api/console/login` 建服务端会话（`tenant_sessions` 表 + httpOnly cookie），
+  每个请求查库校验。密码用 scrypt + 每用户盐
+- 路由: `/console`（登录）、`/console/mappings`、`/console/users`
+- 页面守卫在 `getServerSideProps`（`src/lib/console-page.ts`）——middleware 跑在
+  Edge runtime，用不了 sqlite3，没法查会话表
+- 规划与接口清单见 `docs/specs/2026-09-16-多租户与远程映射表-design.md`
+
+**多租户域名封锁**：`src/middleware.ts` 按 Host 判定。`TENANT_HOSTS`（`next.config.js`
+的 `env`，构建时内联）里的域名下只放行 `/console/*`、`/api/console/*`、`/api/ys/*`、
+`_next/*`，其余一律 **404**。留空 = 不区分域名，行为与改动前一致。
+
 ### API 路由结构
+
+**机器侧（租户凭据，令牌在路径里）**:
+- `GET /api/ys/{token}` - 桌面端拉远程映射表（商家版「远程映射表地址」填的就是它）
+- `GET /api/ys/{token}/mapping` - 只要映射表
+
+**租户控制台**（会话 cookie，全部按 tenantId 过滤）:
+- `POST /api/console/login` / `POST /api/console/logout` / `GET /api/console/me`
+- `/api/console/mappings` - 映射表 CRUD（GET/POST/PUT/DELETE）
+- `POST /api/console/mappings/import` / `GET .../export` / `GET .../template` - xlsx 导入导出
+- `/api/console/users` - 租户员工账号（仅 owner）
 
 **内部 API** (需认证):
 - `POST /api/auth` - 用户登录

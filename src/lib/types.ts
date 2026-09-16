@@ -237,5 +237,60 @@ export const OperatorTypes = {
   EMPLOYEE: 'employee',
 } as const;
 
+// ==================== 多租户（对外那半，2026-09-16）====================
+// 一个租户 = 一家公司。它有自己的控制台登录账号、自己的商品映射表。
+// 桌面端（商家版）凭 tenants.token 调 /api/ys/{token} 拉映射表。
+// 与原有的 users/employees/merchants（云仓自用、单租户）完全分开。
+
+export interface Tenant {
+  id: string;
+  createdAt: string;
+  name: string;            // 公司名
+  contact: string;         // 联系人（自由文本，方便记「张三 138xxxx」）
+  status: boolean;         // true=启用 false=停用；停用后远程接口与登录都失效
+  token: string;           // 远程配置令牌（桌面端填的那个）
+  tokenCreatedAt: string;
+  remark: string;
+}
+
+export interface TenantUser {
+  id: string;
+  tenantId: string;
+  createdAt: string;
+  username: string;
+  password: string;        // scrypt$salt$hash，见 lib/tenant-auth.ts
+  displayName: string;
+  role: 'owner' | 'staff'; // owner 能管员工账号，staff 只能编映射表
+  isActive: boolean;
+  lastLoginTime?: string;
+}
+
+export interface TenantSession {
+  token: string;
+  tenantId: string;
+  tenantUserId: string;
+  createdAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+}
+
+// 商品映射表的一行。字段名与桌面端 app/task/mapping_reader.py 的 entry 对齐，
+// 这样远程 JSON 和本地 xlsx 两条路读出来的东西是同一份。
+export interface ProductMapping {
+  id: string;
+  tenantId: string;
+  createdAt: string;
+  updatedAt: string;
+  productId: string;     // 多多商品ID（唯一键的一部分）
+  pddName: string;       // 多多商品名
+  dispatchName: string;  // 派单表里显示的商品名
+  spec: string;          // 规格 / 单位
+  listCode: string;      // 金蝶代码（条形码由它的末 13 位推导，不单独存）
+  boxSpec: string;       // 箱规
+  category: string;      // 商品大类
+}
+
+export type ProductMappingFormData = Omit<ProductMapping, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>;
+
 // 分页相关类型（从pagination.ts导出）
 export type { PaginationParams, PaginationResult } from './pagination'; 

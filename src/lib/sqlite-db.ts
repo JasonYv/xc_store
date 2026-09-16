@@ -2,7 +2,7 @@ import sqlite3 from 'sqlite3';
 import { open, Database as SQLiteDatabase } from 'sqlite';
 import path from 'path';
 import fs from 'fs';
-import { Merchant, User, Product, ProductSalesOrder, DailyDelivery, ReturnDetail, Employee, OperationLog, OperationLogFormData } from './types';
+import { Merchant, User, Product, ProductSalesOrder, DailyDelivery, ReturnDetail, Employee, OperationLog, OperationLogFormData, Tenant, TenantUser, TenantSession, ProductMapping, ProductMappingFormData } from './types';
 import crypto from 'crypto';
 import { PaginationHelper, PaginationParams, PaginationResult, QueryBuilder } from './pagination';
 
@@ -217,6 +217,83 @@ export class SqliteDatabase {
         CREATE INDEX IF NOT EXISTS idx_operation_logs_operator ON operation_logs(operatorType, operatorId);
         CREATE INDEX IF NOT EXISTS idx_operation_logs_action ON operation_logs(action);
         CREATE INDEX IF NOT EXISTS idx_operation_logs_date ON operation_logs(createdAt);
+      `);
+
+      // ==================== 多租户：对外那半（2026-09-16）====================
+      // 背景：要把商品映射表搬到线上，开给别的公司用——那家公司自己登录、自己维护
+      // 映射表、自己建员工账号。原有的 users/employees/merchants 是「云仓自用」的
+      // 单租户模型，没有租户维度，所以这里整套另起，不去动它们（现有业务零风险）。
+      //
+      // 四个概念：
+      //   tenants        一个租户 = 一家公司
+      //   tenant_users   租户控制台的登录账号（owner 能管员工，staff 只能编映射表）
+      //   tenant_sessions 服务端会话（不是原来那个「cookie 里存 true」的假登录）
+      //   product_mappings 商品映射表，按租户隔离
+      //
+      // 桌面端（商家版）只认 tenants.token，凭它调 /api/ys/{token} 拉映射表。
+
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS tenants (
+          id TEXT PRIMARY KEY,
+          createdAt TEXT NOT NULL,
+          name TEXT NOT NULL,
+          contact TEXT NOT NULL DEFAULT '',
+          status INTEGER NOT NULL DEFAULT 1,
+          token TEXT NOT NULL UNIQUE,
+          tokenCreatedAt TEXT NOT NULL,
+          remark TEXT NOT NULL DEFAULT ''
+        )
+      `);
+
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS tenant_users (
+          id TEXT PRIMARY KEY,
+          tenantId TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          username TEXT NOT NULL,
+          password TEXT NOT NULL,
+          displayName TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'staff',
+          isActive INTEGER NOT NULL DEFAULT 1,
+          lastLoginTime TEXT,
+          UNIQUE(tenantId, username)
+        )
+      `);
+
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS tenant_sessions (
+          token TEXT PRIMARY KEY,
+          tenantId TEXT NOT NULL,
+          tenantUserId TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          expiresAt TEXT NOT NULL,
+          lastSeenAt TEXT NOT NULL
+        )
+      `);
+
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS product_mappings (
+          id TEXT PRIMARY KEY,
+          tenantId TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          productId TEXT NOT NULL DEFAULT '',
+          pddName TEXT NOT NULL DEFAULT '',
+          dispatchName TEXT NOT NULL DEFAULT '',
+          spec TEXT NOT NULL DEFAULT '',
+          listCode TEXT NOT NULL DEFAULT '',
+          boxSpec TEXT NOT NULL DEFAULT '',
+          category TEXT NOT NULL DEFAULT '',
+          UNIQUE(tenantId, productId)
+        )
+      `);
+
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_tenant_users_tenant ON tenant_users(tenantId);
+        CREATE INDEX IF NOT EXISTS idx_tenant_sessions_tenant ON tenant_sessions(tenantId);
+        CREATE INDEX IF NOT EXISTS idx_tenant_sessions_expires ON tenant_sessions(expiresAt);
+        CREATE INDEX IF NOT EXISTS idx_product_mappings_tenant ON product_mappings(tenantId);
+        CREATE INDEX IF NOT EXISTS idx_product_mappings_pdd_name ON product_mappings(tenantId, pddName);
       `);
 
       // 检查是否需要创建默认设置
@@ -2575,6 +2652,565 @@ export class SqliteDatabase {
       changeDetail: row.changeDetail || undefined,
       remark: row.remark || undefined
     };
+  }
+
+  // ======================================================================
+  // 多租户（对外那半，2026-09-16）
+  //
+  // 一个租户 = 一家公司：自己的控制台账号、自己的商品映射表。
+  // 桌面端凭 tenants.token 调 /api/ys/{token} 拉映射表。
+  //
+  // 注意：这里的方法**全部要求显式传 tenantId**，没有「不给就查全部」的默认行为。
+  // 多租户最容易出的错就是漏一个 where 导致串租户，所以宁可让调用方每次都写出来。
+  // ======================================================================
+
+  private rowToTenant(row: any): Tenant {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      name: row.name,
+      contact: row.contact || '',
+      status: !!row.status,
+      token: row.token,
+      tokenCreatedAt: row.tokenCreatedAt,
+      remark: row.remark || '',
+    };
+  }
+
+  private rowToTenantUser(row: any): TenantUser {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      createdAt: row.createdAt,
+      username: row.username,
+      password: row.password,
+      displayName: row.displayName,
+      role: row.role === 'owner' ? 'owner' : 'staff',
+      isActive: !!row.isActive,
+      lastLoginTime: row.lastLoginTime || undefined,
+    };
+  }
+
+  private rowToProductMapping(row: any): ProductMapping {
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      productId: row.productId || '',
+      pddName: row.pddName || '',
+      dispatchName: row.dispatchName || '',
+      spec: row.spec || '',
+      listCode: row.listCode || '',
+      boxSpec: row.boxSpec || '',
+      category: row.category || '',
+    };
+  }
+
+  // ---------------- 租户 ----------------
+
+  async insertTenant(
+    tenant: Omit<Tenant, 'id' | 'createdAt'>
+  ): Promise<Tenant> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const id = Date.now().toString();
+    const createdAt = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT INTO tenants
+         (id, createdAt, name, contact, status, token, tokenCreatedAt, remark)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, createdAt, tenant.name, tenant.contact || '',
+      tenant.status ? 1 : 0, tenant.token, tenant.tokenCreatedAt, tenant.remark || ''
+    );
+
+    const created = await this.getTenantById(id);
+    if (!created) throw new Error('创建租户失败');
+    return created;
+  }
+
+  async getTenantById(id: string): Promise<Tenant | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get('SELECT * FROM tenants WHERE id = ?', id);
+    return row ? this.rowToTenant(row) : null;
+  }
+
+  /** 按远程配置令牌查租户。桌面端那条路唯一的入口，所以要判 status。 */
+  async getTenantByToken(token: string): Promise<Tenant | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get('SELECT * FROM tenants WHERE token = ?', token);
+    return row ? this.rowToTenant(row) : null;
+  }
+
+  async getAllTenants(): Promise<Tenant[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all('SELECT * FROM tenants ORDER BY createdAt DESC');
+    return rows.map(row => this.rowToTenant(row));
+  }
+
+  async updateTenant(id: string, updatedData: Partial<Tenant>): Promise<Tenant | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existing = await this.getTenantById(id);
+    if (!existing) return null;
+
+    const fields = Object.keys(updatedData).filter(
+      key => key !== 'id' && key !== 'createdAt'
+    );
+    if (fields.length === 0) return existing;
+
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const values = fields.map(field =>
+      field === 'status'
+        ? (updatedData.status ? 1 : 0)
+        : updatedData[field as keyof typeof updatedData]
+    );
+
+    await this.db.run(`UPDATE tenants SET ${setClause} WHERE id = ?`, ...values, id);
+    return this.getTenantById(id);
+  }
+
+  /** 换一个远程配置令牌（旧 token 立即失效）。 */
+  async rotateTenantToken(id: string, newToken: string): Promise<Tenant | null> {
+    return this.updateTenant(id, {
+      token: newToken,
+      tokenCreatedAt: new Date().toISOString(),
+    });
+  }
+
+  // ---------------- 租户用户（控制台登录）----------------
+
+  async insertTenantUser(
+    user: Omit<TenantUser, 'id' | 'createdAt' | 'lastLoginTime'>
+  ): Promise<TenantUser> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const id = Date.now().toString();
+    const createdAt = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT INTO tenant_users
+         (id, tenantId, createdAt, username, password, displayName, role, isActive)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, user.tenantId, createdAt, user.username, user.password,
+      user.displayName, user.role, user.isActive ? 1 : 0
+    );
+
+    const created = await this.getTenantUserById(id);
+    if (!created) throw new Error('创建租户用户失败');
+    return created;
+  }
+
+  async getTenantUserById(id: string): Promise<TenantUser | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get('SELECT * FROM tenant_users WHERE id = ?', id);
+    return row ? this.rowToTenantUser(row) : null;
+  }
+
+  /** 登录用：用户名在租户内唯一，所以必须同时给 tenantId 之外还要能按用户名找。
+   *  登录时用户只说自己的用户名，所以这里按 username 全局找——如果撞名，
+   *  用第一条并让密码校验兜底（撞名时另一个租户登录不了，创建时就该拦住）。 */
+  async getTenantUsersByUsername(username: string): Promise<TenantUser[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT * FROM tenant_users WHERE username = ? AND isActive = 1', username
+    );
+    return rows.map(row => this.rowToTenantUser(row));
+  }
+
+  async getTenantUsers(tenantId: string): Promise<TenantUser[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT * FROM tenant_users WHERE tenantId = ? ORDER BY createdAt ASC', tenantId
+    );
+    return rows.map(row => this.rowToTenantUser(row));
+  }
+
+  /** 用户名在**全库**是否已被占用（跨租户）。注册/改名时用来避免上面那个撞名。 */
+  async tenantUsernameExists(username: string, excludeId = ''): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT COUNT(*) as count FROM tenant_users WHERE username = ? AND id != ?',
+      username, excludeId
+    );
+    return row.count > 0;
+  }
+
+  async updateTenantUser(id: string, updatedData: Partial<TenantUser>): Promise<TenantUser | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existing = await this.getTenantUserById(id);
+    if (!existing) return null;
+
+    const fields = Object.keys(updatedData).filter(
+      key => key !== 'id' && key !== 'tenantId' && key !== 'createdAt'
+    );
+    if (fields.length === 0) return existing;
+
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const values = fields.map(field =>
+      field === 'isActive'
+        ? (updatedData.isActive ? 1 : 0)
+        : updatedData[field as keyof typeof updatedData]
+    );
+
+    await this.db.run(`UPDATE tenant_users SET ${setClause} WHERE id = ?`, ...values, id);
+    return this.getTenantUserById(id);
+  }
+
+  /** 更新登录时间。登录成功时调一次。 */
+  async touchTenantUserLogin(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(
+      'UPDATE tenant_users SET lastLoginTime = ? WHERE id = ?',
+      new Date().toISOString(), id
+    );
+  }
+
+  /** 租户里的 owner 数量——用来拦住「把最后一个管理员删/停用掉」。 */
+  async countTenantOwners(tenantId: string, excludeId = ''): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      `SELECT COUNT(*) as count FROM tenant_users
+        WHERE tenantId = ? AND role = 'owner' AND isActive = 1 AND id != ?`,
+      tenantId, excludeId
+    );
+    return row.count;
+  }
+
+  async deleteTenantUser(id: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run('DELETE FROM tenant_users WHERE id = ?', id);
+    return result.changes ? result.changes > 0 : false;
+  }
+
+  // ---------------- 会话 ----------------
+
+  async insertTenantSession(
+    session: Omit<TenantSession, 'lastSeenAt'>
+  ): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(
+      `INSERT INTO tenant_sessions
+         (token, tenantId, tenantUserId, createdAt, expiresAt, lastSeenAt)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      session.token, session.tenantId, session.tenantUserId,
+      session.createdAt, session.expiresAt, session.createdAt
+    );
+  }
+
+  async getTenantSession(token: string): Promise<TenantSession | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get('SELECT * FROM tenant_sessions WHERE token = ?', token);
+    if (!row) return null;
+    return {
+      token: row.token,
+      tenantId: row.tenantId,
+      tenantUserId: row.tenantUserId,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+      lastSeenAt: row.lastSeenAt,
+    };
+  }
+
+  async touchTenantSession(token: string, expiresAt: string): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(
+      'UPDATE tenant_sessions SET lastSeenAt = ?, expiresAt = ? WHERE token = ?',
+      new Date().toISOString(), expiresAt, token
+    );
+  }
+
+  async deleteTenantSession(token: string): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run('DELETE FROM tenant_sessions WHERE token = ?', token);
+  }
+
+  /** 停用租户或改密码时把该租户的全部会话踢掉。 */
+  async deleteTenantSessionsByTenant(tenantId: string): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM tenant_sessions WHERE tenantId = ?', tenantId
+    );
+    return result.changes || 0;
+  }
+
+  async deleteTenantSessionsByUser(tenantUserId: string): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM tenant_sessions WHERE tenantUserId = ?', tenantUserId
+    );
+    return result.changes || 0;
+  }
+
+  /** 清掉已过期的会话。顺手做，避免表无限增长。 */
+  async purgeExpiredTenantSessions(): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM tenant_sessions WHERE expiresAt < ?', new Date().toISOString()
+    );
+    return result.changes || 0;
+  }
+
+  // ---------------- 商品映射表 ----------------
+
+  async getProductMappingsPaginated(
+    tenantId: string,
+    page: number,
+    pageSize: number,
+    keyword?: string
+  ): Promise<PaginationResult<ProductMapping>> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const builder = new QueryBuilder('product_mappings');
+    builder.select('*');
+    // 租户隔离：这一条不能少
+    builder.where('tenantId = ?', tenantId);
+    if (keyword) {
+      // 商品名/派单名/商品码/金蝶代码 都能搜——运营记不住自己是用哪个字段找的
+      builder.search(keyword, ['pddName', 'dispatchName', 'productId', 'listCode']);
+    }
+    builder.orderBy('updatedAt', 'DESC');
+    builder.paginate(page, pageSize);
+
+    const { sql, params } = builder.buildQuery();
+    const rows = await this.db.all(sql, ...params);
+
+    const countQuery = builder.buildCountQuery();
+    const countResult = await this.db.get(countQuery.sql, ...countQuery.params);
+    const total = countResult.count;
+
+    return {
+      items: rows.map((row: any) => this.rowToProductMapping(row)),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /** 某个租户的**全部**映射行——远程接口用，不分页。 */
+  async getAllProductMappings(tenantId: string): Promise<ProductMapping[]> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT * FROM product_mappings WHERE tenantId = ? ORDER BY updatedAt DESC',
+      tenantId
+    );
+    return rows.map(row => this.rowToProductMapping(row));
+  }
+
+  /** 映射表的最后修改时间，用作远程接口的 version。没数据时为 null。 */
+  async getProductMappingsVersion(tenantId: string): Promise<string | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT MAX(updatedAt) as latest FROM product_mappings WHERE tenantId = ?',
+      tenantId
+    );
+    return row && row.latest ? row.latest : null;
+  }
+
+  async getProductMappingById(id: string, tenantId: string): Promise<ProductMapping | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    // tenantId 一起进 where：拿到别人的 id 也读不出来
+    const row = await this.db.get(
+      'SELECT * FROM product_mappings WHERE id = ? AND tenantId = ?', id, tenantId
+    );
+    return row ? this.rowToProductMapping(row) : null;
+  }
+
+  /** 按商品码精确查一行。唯一性校验必须用它——分页搜索走的是 LIKE，
+   *  拿它当唯一性判断会把 "1001" 和 "10010" 判成重复。 */
+  async getProductMappingByProductId(
+    tenantId: string,
+    productId: string
+  ): Promise<ProductMapping | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const row = await this.db.get(
+      'SELECT * FROM product_mappings WHERE tenantId = ? AND productId = ?',
+      tenantId, productId
+    );
+    return row ? this.rowToProductMapping(row) : null;
+  }
+
+  async insertProductMapping(
+    tenantId: string,
+    data: ProductMappingFormData
+  ): Promise<ProductMapping> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const id = Date.now().toString() + Math.random().toString(36).slice(2, 8);
+    const now = new Date().toISOString();
+
+    await this.db.run(
+      `INSERT INTO product_mappings
+         (id, tenantId, createdAt, updatedAt, productId, pddName, dispatchName,
+          spec, listCode, boxSpec, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, tenantId, now, now, data.productId || '', data.pddName || '',
+      data.dispatchName || '', data.spec || '', data.listCode || '',
+      data.boxSpec || '', data.category || ''
+    );
+
+    const created = await this.getProductMappingById(id, tenantId);
+    if (!created) throw new Error('创建映射行失败');
+    return created;
+  }
+
+  async updateProductMapping(
+    id: string,
+    tenantId: string,
+    data: Partial<ProductMappingFormData>
+  ): Promise<ProductMapping | null> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const existing = await this.getProductMappingById(id, tenantId);
+    if (!existing) return null;
+
+    const allowed = ['productId', 'pddName', 'dispatchName', 'spec', 'listCode', 'boxSpec', 'category'];
+    const fields = Object.keys(data).filter(key => allowed.includes(key));
+    if (fields.length === 0) return existing;
+
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const values = fields.map(field => (data as any)[field] ?? '');
+
+    await this.db.run(
+      `UPDATE product_mappings SET ${setClause}, updatedAt = ? WHERE id = ? AND tenantId = ?`,
+      ...values, new Date().toISOString(), id, tenantId
+    );
+
+    return this.getProductMappingById(id, tenantId);
+  }
+
+  async deleteProductMapping(id: string, tenantId: string): Promise<boolean> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM product_mappings WHERE id = ? AND tenantId = ?', id, tenantId
+    );
+    return result.changes ? result.changes > 0 : false;
+  }
+
+  /**
+   * 按 productId upsert 一批映射行（xlsx 导入用）。
+   *
+   * 按 productId 去重而不是整表替换：导入一份清单不应该影响清单里没提到的商品。
+   * productId 为空的行直接跳过（它是唯一键的一部分，空值无法 upsert）。
+   * 返回 新增/更新/跳过 三个计数，界面要如实告诉用户发生了多少事。
+   */
+  async upsertProductMappings(
+    tenantId: string,
+    rows: ProductMappingFormData[]
+  ): Promise<{ inserted: number; updated: number; skipped: number }> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
+    const now = new Date().toISOString();
+
+    await this.transaction(async () => {
+      for (const row of rows) {
+        const productId = (row.productId || '').trim();
+        if (!productId) {
+          skipped += 1;
+          continue;
+        }
+
+        const existing = await this.db!.get(
+          'SELECT id FROM product_mappings WHERE tenantId = ? AND productId = ?',
+          tenantId, productId
+        );
+
+        if (existing) {
+          await this.db!.run(
+            `UPDATE product_mappings
+                SET pddName = ?, dispatchName = ?, spec = ?, listCode = ?,
+                    boxSpec = ?, category = ?, updatedAt = ?
+              WHERE id = ?`,
+            row.pddName || '', row.dispatchName || '', row.spec || '',
+            row.listCode || '', row.boxSpec || '', row.category || '',
+            now, existing.id
+          );
+          updated += 1;
+        } else {
+          await this.db!.run(
+            `INSERT INTO product_mappings
+               (id, tenantId, createdAt, updatedAt, productId, pddName, dispatchName,
+                spec, listCode, boxSpec, category)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            Date.now().toString() + Math.random().toString(36).slice(2, 8),
+            tenantId, now, now, productId, row.pddName || '', row.dispatchName || '',
+            row.spec || '', row.listCode || '', row.boxSpec || '', row.category || ''
+          );
+          inserted += 1;
+        }
+      }
+    });
+
+    return { inserted, updated, skipped };
+  }
+
+  /** 清空某个租户的映射表（界面上「全部清空」用，要二次确认）。 */
+  async deleteAllProductMappings(tenantId: string): Promise<number> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.run(
+      'DELETE FROM product_mappings WHERE tenantId = ?', tenantId
+    );
+    return result.changes || 0;
   }
 
   async close() {
