@@ -20,13 +20,39 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import type { ProductMapping } from '@/lib/types';
+import type { ProductMapping, ProductMappingFormData } from '@/lib/types';
+
+export interface MappingColumn {
+  key: keyof ProductMappingFormData;
+  title: string;
+  mono?: boolean;
+}
+
+/** 商家版清单的 7 列（租户控制台） */
+export const TENANT_MAPPING_COLUMNS: MappingColumn[] = [
+  { key: 'dispatchName', title: '派单表商品名称' },
+  { key: 'pddName', title: '多多商品名称' },
+  { key: 'productId', title: '商品码', mono: true },
+  { key: 'spec', title: '规格' },
+  { key: 'listCode', title: '金蝶代码', mono: true },
+  { key: 'boxSpec', title: '箱规' },
+  { key: 'category', title: '商品大类' },
+];
+
+/** 云仓版原表的 4 列（A–D），云仓出派单表只用到这些 */
+export const CLOUD_MAPPING_COLUMNS: MappingColumn[] = [
+  { key: 'dispatchName', title: '派单表商品名称' },
+  { key: 'pddName', title: '多多商品名称' },
+  { key: 'productId', title: 'ID', mono: true },
+  { key: 'spec', title: '规格' },
+];
 
 // 映射表列表。骨架照 components/merchant/MerchantTable：
 // 圆角边框的 shadcn Table + 底部分页，空态和加载态各占一行。
 
 interface MappingTableProps {
   rows: ProductMapping[];
+  columns?: MappingColumn[];
   isLoading: boolean;
   currentPage: number;
   totalPages: number;
@@ -46,6 +72,7 @@ function Cell({ value, mono = false }: { value: string; mono?: boolean }) {
 
 export default function MappingTable({
   rows,
+  columns = TENANT_MAPPING_COLUMNS,
   isLoading,
   currentPage,
   totalPages,
@@ -70,53 +97,35 @@ export default function MappingTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">派单表商品名称</TableHead>
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">多多商品名称</TableHead>
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">商品码</TableHead>
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">规格</TableHead>
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">金蝶代码</TableHead>
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">箱规</TableHead>
-              <TableHead className="h-9 whitespace-nowrap px-2 py-1 font-medium">商品大类</TableHead>
+              {columns.map(column => (
+                <TableHead key={column.key} className="h-9 whitespace-nowrap px-2 py-1 font-medium">
+                  {column.title}
+                </TableHead>
+              ))}
               <TableHead className="h-9 w-[110px] px-2 py-1 text-right font-medium">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
                   加载中…
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                  没有数据。可以「新增一行」手工建，或者「导入 xlsx」把现有的商品清单传上来。
+                <TableCell colSpan={columns.length + 1} className="h-24 text-center text-muted-foreground">
+                  没有数据。可以「新增一行」手工建，或者「导入」把现有的映射表传上来。
                 </TableCell>
               </TableRow>
             ) : (
               rows.map(row => (
                 <TableRow key={row.id}>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.dispatchName} />
-                  </TableCell>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.pddName} />
-                  </TableCell>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.productId} mono />
-                  </TableCell>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.spec} />
-                  </TableCell>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.listCode} mono />
-                  </TableCell>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.boxSpec} />
-                  </TableCell>
-                  <TableCell className="px-2 py-1.5">
-                    <Cell value={row.category} />
-                  </TableCell>
+                  {columns.map(column => (
+                    <TableCell key={column.key} className="px-2 py-1.5">
+                      <Cell value={row[column.key]} mono={column.mono} />
+                    </TableCell>
+                  ))}
                   <TableCell className="px-2 py-1.5 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button

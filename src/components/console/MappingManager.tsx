@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import MappingSearch from '@/components/console/MappingSearch';
-import MappingTable from '@/components/console/MappingTable';
-import MappingForm, { type MappingFormValue } from '@/components/console/MappingForm';
+import MappingTable, {
+  CLOUD_MAPPING_COLUMNS,
+  TENANT_MAPPING_COLUMNS,
+} from '@/components/console/MappingTable';
+import MappingForm, {
+  CLOUD_FORM_FIELDS,
+  TENANT_FORM_FIELDS,
+  type MappingFormValue,
+} from '@/components/console/MappingForm';
 import Modal from '@/components/common/Modal';
 import { useToast } from '@/hooks/use-toast';
 import type { ProductMapping } from '@/lib/types';
@@ -14,10 +21,41 @@ import type { ProductMapping } from '@/lib/types';
 // 两处用它：租户控制台（/console/mappings，数据给商家版）和云仓内部后台
 // （/dashboard/dispatch-mappings，数据给云仓版）。两边只差接口前缀和
 // 「数据给谁用」的提示文字，逻辑必须一致，所以只写这一份。
+//
+// 两边的表格式不同（variant）：
+// - tenant：商家版清单 7 列，按表头名认列
+// - cloud：云仓版原表 A–D 四列，按位置读，派单名必填（见 lib/cloud-mapping-xlsx.ts）
+
+const VARIANTS = {
+  tenant: {
+    columns: TENANT_MAPPING_COLUMNS,
+    formFields: TENANT_FORM_FIELDS,
+    accept: '.xlsx',
+    searchPlaceholder: '商品名 / 派单名 / 商品码 / 金蝶代码，任一即可',
+    description: undefined,
+    skippedReason: '表头重复或缺商品码',
+  },
+  cloud: {
+    columns: CLOUD_MAPPING_COLUMNS,
+    formFields: CLOUD_FORM_FIELDS,
+    accept: '.xls,.xlsx',
+    searchPlaceholder: '派单名 / 多多商品名 / ID，任一即可',
+    description: (
+      <>
+        导入直接用原来那份映射表（.xls/.xlsx 都行）：第 1 行当表头跳过，按
+        <strong className="font-medium"> A 派单名 / B 多多商品名称 / C ID / D 规格 </strong>
+        读，E 列不读；按 ID 更新，文件里没有的商品保持不变。
+      </>
+    ),
+    skippedReason: '缺派单名或缺 ID',
+  },
+} as const;
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 interface MappingManagerProps {
+  /** 表格式，默认 tenant */
+  variant?: keyof typeof VARIANTS;
   /** 接口前缀，如 /api/console/mappings；导入/导出/模板在它下面 */
   apiBase: string;
   /** 数据的使用方（「商家版」/「云仓版」），用在删除确认里 */
@@ -26,8 +64,14 @@ interface MappingManagerProps {
   onUnauthorized?: () => void;
 }
 
-export default function MappingManager({ apiBase, consumerLabel, onUnauthorized }: MappingManagerProps) {
+export default function MappingManager({
+  variant = 'tenant',
+  apiBase,
+  consumerLabel,
+  onUnauthorized,
+}: MappingManagerProps) {
   const { toast } = useToast();
+  const config = VARIANTS[variant];
 
   const [rows, setRows] = useState<ProductMapping[]>([]);
   const [total, setTotal] = useState(0);
@@ -93,6 +137,10 @@ export default function MappingManager({ apiBase, consumerLabel, onUnauthorized 
       toast({ title: '商品码不能为空', variant: 'destructive' });
       return;
     }
+    if (variant === 'cloud' && !value.dispatchName.trim()) {
+      toast({ title: '派单表商品名称不能为空', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const isEdit = !!editing;
@@ -156,9 +204,8 @@ export default function MappingManager({ apiBase, consumerLabel, onUnauthorized 
       const { inserted, updated, skipped, parseSkipped, headerRecognized } = body.data;
       const details = [
         `新增 ${inserted}、更新 ${updated}`,
-        // parseSkipped 里既有「缺商品码的行」，也有「重复出现的表头行」，
-        // 别只写缺商品码，否则用户会对着文件数不出来为什么少一行
-        parseSkipped ? `另有 ${parseSkipped} 行已跳过（表头重复或缺商品码）` : '',
+        // 跳过原因按表格式说清楚，否则用户会对着文件数不出来为什么少一行
+        parseSkipped ? `另有 ${parseSkipped} 行已跳过（${config.skippedReason}）` : '',
         skipped ? `${skipped} 行被跳过` : '',
         headerRecognized ? '' : '（表头没认出来，按固定列位置读的）',
       ].filter(Boolean).join('；');
@@ -196,19 +243,22 @@ export default function MappingManager({ apiBase, consumerLabel, onUnauthorized 
         onImportClick={() => fileInputRef.current?.click()}
         importing={importing}
         total={total}
+        description={config.description}
+        searchPlaceholder={config.searchPlaceholder}
       />
 
       {/* 隐藏的文件选择器：导入按钮只是它的触发器，样式统一到 Button 上 */}
       <input
         ref={fileInputRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept={config.accept}
         className="hidden"
         onChange={handleImport}
       />
 
       <MappingTable
         rows={rows}
+        columns={config.columns}
         isLoading={loading}
         currentPage={page}
         totalPages={Math.max(1, Math.ceil(total / pageSize))}
@@ -233,6 +283,7 @@ export default function MappingManager({ apiBase, consumerLabel, onUnauthorized 
           onSubmit={handleFormSubmit}
           onCancel={closeForm}
           submitting={saving}
+          fields={config.formFields}
         />
       </Modal>
     </>

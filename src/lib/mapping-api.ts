@@ -4,6 +4,11 @@ import fs from 'fs';
 import path from 'path';
 import db from '@/lib/sqlite-db';
 import { buildMappingTemplate, buildMappingWorkbook, parseMappingWorkbook } from '@/lib/mapping-xlsx';
+import {
+  buildCloudMappingTemplate,
+  buildCloudMappingWorkbook,
+  parseCloudMappingFile,
+} from '@/lib/cloud-mapping-xlsx';
 import type { ProductMapping, ProductMappingFormData } from '@/lib/types';
 
 // 商品映射表接口的处理逻辑，两个入口共用：
@@ -22,6 +27,34 @@ import type { ProductMapping, ProductMappingFormData } from '@/lib/types';
  * 租户 id 是 Date.now()+随机串生成的，不会撞上这个带下划线的值。
  */
 export const CLOUD_MAPPING_TENANT_ID = '__cloud_warehouse__';
+
+/**
+ * 映射表的 Excel 格式与必填规则。两边的表不是一个格式（见 lib/cloud-mapping-xlsx.ts）：
+ * - TENANT：商家版清单，按表头名认列，7 列，只收 .xlsx
+ * - CLOUD：云仓版原表，按 A–D 位置读，4 列，.xls/.xlsx 都收；派单名必填
+ *   （云仓版采集端读的时候没有派单名的行会被丢掉，后台不能让这种行存进去）
+ */
+export interface MappingFormat {
+  parse: (buffer: Buffer) => Promise<{ rows: ProductMappingFormData[]; skipped: number; headerRecognized: boolean }>;
+  buildWorkbook: (rows: ProductMapping[]) => Promise<Buffer>;
+  buildTemplate: () => Promise<Buffer>;
+  requireDispatchName: boolean;
+}
+
+export const TENANT_MAPPING_FORMAT: MappingFormat = {
+  parse: parseMappingWorkbook,
+  buildWorkbook: buildMappingWorkbook,
+  buildTemplate: buildMappingTemplate,
+  requireDispatchName: false,
+};
+
+export const CLOUD_MAPPING_FORMAT: MappingFormat = {
+  // 按位置读，没有「表头认没认出来」这回事，固定报 true，界面不会误提示
+  parse: async buffer => ({ ...parseCloudMappingFile(buffer), headerRecognized: true }),
+  buildWorkbook: buildCloudMappingWorkbook,
+  buildTemplate: buildCloudMappingTemplate,
+  requireDispatchName: true,
+};
 
 const MAX_PAGE_SIZE = 200;
 /** 单文件上限：映射表是纯文本表格，20MB 足够（几万行也就几 MB）。 */
@@ -54,7 +87,8 @@ export async function handleMappingCrud(
   req: NextApiRequest,
   res: NextApiResponse,
   tenantId: string,
-  logTag: string
+  logTag: string,
+  format: MappingFormat = TENANT_MAPPING_FORMAT
 ) {
   try {
     if (req.method === 'GET') {
@@ -76,6 +110,9 @@ export async function handleMappingCrud(
       if (!productId) {
         // productId 是 upsert 的唯一键，没有它这行存不住也匹配不上
         return res.status(400).json({ success: false, error: '商品码(productId)不能为空' });
+      }
+      if (format.requireDispatchName && !trimmed(body.dispatchName)) {
+        return res.status(400).json({ success: false, error: '派单表商品名称不能为空' });
       }
 
       const duplicated = await db.getProductMappingByProductId(tenantId, productId);
@@ -117,6 +154,10 @@ export async function handleMappingCrud(
             error: `商品码 ${nextProductId} 已被另一行使用`,
           });
         }
+      }
+
+      if (format.requireDispatchName && body.dispatchName !== undefined && !trimmed(body.dispatchName)) {
+        return res.status(400).json({ success: false, error: '派单表商品名称不能为空' });
       }
 
       const fields = ['productId', 'pddName', 'dispatchName', 'spec', 'listCode', 'boxSpec', 'category'] as const;
@@ -168,7 +209,8 @@ export async function handleMappingImport(
   res: NextApiResponse,
   tenantId: string,
   ownerLabel: string,
-  logTag: string
+  logTag: string,
+  format: MappingFormat = TENANT_MAPPING_FORMAT
 ) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -210,13 +252,13 @@ export async function handleMappingImport(
     tempFilePath = uploaded.filepath;
 
     const buffer = fs.readFileSync(tempFilePath);
-    const parsed = await parseMappingWorkbook(buffer);
+    const parsed = await format.parse(buffer);
 
     if (parsed.rows.length === 0) {
       return res.status(400).json({
         success: false,
         error: parsed.skipped > 0
-          ? `文件里 ${parsed.skipped} 行都被跳过了（缺商品码，或商品名全空），没有可导入的数据`
+          ? `文件里 ${parsed.skipped} 行都被跳过了（${format.requireDispatchName ? '缺派单名或缺 ID' : '缺商品码，或商品名全空'}），没有可导入的数据`
           : '文件里没有数据行（第一行按表头处理）',
       });
     }
@@ -245,7 +287,7 @@ export async function handleMappingImport(
     console.error(`[${logTag}] 出错:`, error);
     const message = error instanceof Error ? error.message : '未知错误';
     // 文件读不动 / 不是合法 xlsx 是用户可修复的问题，给 400 而不是 500
-    const isUserError = /zip|not a valid|corrupt|Unsupported|central directory|File size/i.test(message);
+    const isUserError = /zip|not a valid|corrupt|Unsupported|central directory|File size|Invalid|CFB|signature/i.test(message);
     return res.status(isUserError ? 400 : 500).json({
       success: false,
       error: isUserError ? `文件解析失败：${message}` : '服务器内部错误',
@@ -273,7 +315,8 @@ export async function handleMappingExport(
   res: NextApiResponse,
   tenantId: string,
   fileLabel: string,
-  logTag: string
+  logTag: string,
+  format: MappingFormat = TENANT_MAPPING_FORMAT
 ) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
@@ -282,7 +325,7 @@ export async function handleMappingExport(
 
   try {
     const rows = await db.getAllProductMappings(tenantId);
-    const buffer = await buildMappingWorkbook(rows);
+    const buffer = await format.buildWorkbook(rows);
 
     const safeName = fileLabel.replace(/[\\/:*?"<>|]/g, '_');
     const date = new Date().toISOString().slice(0, 10);
@@ -311,7 +354,8 @@ export async function handleMappingExport(
 export async function handleMappingTemplate(
   req: NextApiRequest,
   res: NextApiResponse,
-  logTag: string
+  logTag: string,
+  format: MappingFormat = TENANT_MAPPING_FORMAT
 ) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
@@ -319,7 +363,7 @@ export async function handleMappingTemplate(
   }
 
   try {
-    const buffer = await buildMappingTemplate();
+    const buffer = await format.buildTemplate();
     res.setHeader('Content-Type', XLSX_CONTENT_TYPE);
     res.setHeader(
       'Content-Disposition',

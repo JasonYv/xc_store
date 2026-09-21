@@ -41,11 +41,11 @@ export default function DispatchMappingsPage() {
           <CardDescription>
             云仓版出派单表时，会用「API地址 + API密钥」自动从这里拉取映射表（按 productId 匹配派单商品名和规格），
             保存后下一次出表即生效，不用再去机器上换文件。后台拉不到或这里还是空表时，云仓版会先用上次拉到的缓存，
-            再退回 GUI 里「映射表路径」那份本地文件。首次使用请把现有映射表 xlsx「导入」进来。
+            再退回 GUI 里「映射表路径」那份本地文件。首次使用请把现在用的映射表（.xls 直接传）「导入」进来。
           </CardDescription>
         </CardHeader>
       </Card>
-      <MappingManager apiBase="/api/dispatch-mappings" consumerLabel="云仓版" />
+      <MappingManager variant="cloud" apiBase="/api/dispatch-mappings" consumerLabel="云仓版" />
     </DashboardLayout>
   );
 }

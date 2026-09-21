@@ -19,6 +19,9 @@ interface MappingSearchProps {
   onImportClick: () => void;
   importing: boolean;
   total: number;
+  /** 标题下面那句说明；不传用默认（按商品码更新） */
+  description?: React.ReactNode;
+  searchPlaceholder?: string;
 }
 
 export default function MappingSearch({
@@ -31,6 +34,8 @@ export default function MappingSearch({
   onImportClick,
   importing,
   total,
+  description,
+  searchPlaceholder = '商品名 / 派单名 / 商品码 / 金蝶代码，任一即可',
 }: MappingSearchProps) {
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') onSearch();
@@ -41,8 +46,13 @@ export default function MappingSearch({
       <div>
         <h1 className="text-xl font-bold tracking-tight">商品映射表</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          共 {total} 行。导入是<strong className="font-medium">按商品码更新</strong>：
-          只影响文件里出现的商品，没提到的保持不变。
+          共 {total} 行。
+          {description ?? (
+            <>
+              导入是<strong className="font-medium">按商品码更新</strong>：
+              只影响文件里出现的商品，没提到的保持不变。
+            </>
+          )}
         </p>
       </div>
 
@@ -51,7 +61,7 @@ export default function MappingSearch({
           <label className="text-xs font-medium text-gray-700">搜索</label>
           <Input
             type="text"
-            placeholder="商品名 / 派单名 / 商品码 / 金蝶代码，任一即可"
+            placeholder={searchPlaceholder}
             value={keyword}
             onChange={event => onKeywordChange(event.target.value)}
             onKeyDown={handleKeyDown}
@@ -75,7 +85,7 @@ export default function MappingSearch({
             className="h-8 px-3 text-sm"
           >
             <FileUp className="mr-1 h-3.5 w-3.5" />
-            {importing ? '导入中…' : '导入 xlsx'}
+            {importing ? '导入中…' : '导入 Excel'}
           </Button>
           <Button variant="outline" size="sm" asChild className="h-8 px-3 text-sm">
             <a href={`${apiBase}/export`}>

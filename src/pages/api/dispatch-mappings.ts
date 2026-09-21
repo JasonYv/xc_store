@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import db from '@/lib/sqlite-db';
-import { CLOUD_MAPPING_TENANT_ID, handleMappingCrud } from '@/lib/mapping-api';
+import { CLOUD_MAPPING_FORMAT, CLOUD_MAPPING_TENANT_ID, handleMappingCrud } from '@/lib/mapping-api';
 
 // 云仓自用的派单表商品映射表（内部后台 /dashboard/dispatch-mappings 用）。
 //
@@ -12,5 +12,5 @@ import { CLOUD_MAPPING_TENANT_ID, handleMappingCrud } from '@/lib/mapping-api';
 // 配了 TENANT_HOSTS 时租户域名下访问这里一律 404（middleware）。
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await db.init();
-  return handleMappingCrud(req, res, CLOUD_MAPPING_TENANT_ID, 'dispatch-mappings');
+  return handleMappingCrud(req, res, CLOUD_MAPPING_TENANT_ID, 'dispatch-mappings', CLOUD_MAPPING_FORMAT);
 }

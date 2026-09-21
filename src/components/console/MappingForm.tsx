@@ -29,12 +29,15 @@ export const EMPTY_MAPPING_FORM: MappingFormValue = {
   category: '',
 };
 
-const FIELDS: {
+export interface MappingFormField {
   key: keyof MappingFormValue;
   label: string;
   hint?: string;
   full?: boolean;
-}[] = [
+}
+
+/** 商家版清单的 7 个字段（租户控制台） */
+export const TENANT_FORM_FIELDS: MappingFormField[] = [
   { key: 'dispatchName', label: '派单表商品名称', hint: '派单表里显示的名字', full: true },
   { key: 'pddName', label: '多多商品名称', hint: '多多买菜上的商品名', full: true },
   { key: 'productId', label: '商品码 (productId)', hint: '匹配用的，必填且不可重复' },
@@ -44,14 +47,29 @@ const FIELDS: {
   { key: 'category', label: '商品大类' },
 ];
 
+/** 云仓版原表的 4 个字段；派单名必填（云仓版采集端没有派单名的行不读） */
+export const CLOUD_FORM_FIELDS: MappingFormField[] = [
+  { key: 'dispatchName', label: '派单表商品名称', hint: '派单表里显示的名字，必填', full: true },
+  { key: 'pddName', label: '多多商品名称', hint: '多多买菜上的商品名', full: true },
+  { key: 'productId', label: 'ID', hint: '多多商品 ID，匹配用的，必填且不可重复' },
+  { key: 'spec', label: '规格' },
+];
+
 interface MappingFormProps {
   mapping?: ProductMapping;
   onSubmit: (value: MappingFormValue) => void;
   onCancel: () => void;
   submitting: boolean;
+  fields?: MappingFormField[];
 }
 
-export default function MappingForm({ mapping, onSubmit, onCancel, submitting }: MappingFormProps) {
+export default function MappingForm({
+  mapping,
+  onSubmit,
+  onCancel,
+  submitting,
+  fields = TENANT_FORM_FIELDS,
+}: MappingFormProps) {
   const [value, setValue] = useState<MappingFormValue>(EMPTY_MAPPING_FORM);
 
   useEffect(() => {
@@ -81,7 +99,7 @@ export default function MappingForm({ mapping, onSubmit, onCancel, submitting }:
       }}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {FIELDS.map(field => (
+        {fields.map(field => (
           <div key={field.key} className={field.full ? 'sm:col-span-2' : ''}>
             <label className="mb-1 block text-xs font-medium text-gray-700" htmlFor={field.key}>
               {field.label}

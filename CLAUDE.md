@@ -119,6 +119,13 @@ npm run deploy
   （`src/lib/mapping-api.ts`），数据在 `product_mappings`，tenantId 固定为 `CLOUD_MAPPING_TENANT_ID`
   （`__cloud_warehouse__`，**不是** tenants 表里的行，租户令牌/控制台都够不到）
 - `GET /api/public/dispatch-mapping`（API Key）—— 云仓版桌面端出派单表时拉取，响应形状同 `/api/ys/{token}`
+- **云仓表格式和商家版不同**（`src/lib/cloud-mapping-xlsx.ts`）：原表是 `.xls`、A 列表头空、C 列叫 `ID`，
+  所以按 A 派单名 / B 多多名 / C ID / D 规格**位置读**、跳过第 1 行、A 和 C 都有才收，
+  逐条照抄云仓版采集端 `mapping_reader._parse_row`，改一边要改另一边。派单名必填。
+  页面/表单/导出只有这 4 列（`MappingManager variant="cloud"`）
+- `.xls` 靠 SheetJS 读：**从官方 CDN 装的 0.20.3**（`package.json` 里是 tarball 地址）。
+  npm 上的 `xlsx` 停在 0.18.5 且有已知漏洞，升级时换 `https://cdn.sheetjs.com/xlsx-<版本>/xlsx-<版本>.tgz`，
+  别 `npm i xlsx`。写 xlsx 仍用 exceljs
 - 导入路由的 `export const config = { api: { bodyParser: false } }` 必须**字面量写在路由文件里**，
   从别处 import 过来 Next 不认（build 会警告），导入就会坏
 
