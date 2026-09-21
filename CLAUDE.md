@@ -114,6 +114,14 @@ npm run deploy
 - `POST /api/employee-login` - 员工登录
 - `/api/merchants/send-message` - 发送企业微信消息
 
+**云仓派单映射表**（2026-09-21，内部后台 `/dashboard/dispatch-mappings`）:
+- `/api/dispatch-mappings`（CRUD）、`.../import`、`.../export`、`.../template` —— 与控制台映射表同一套处理逻辑
+  （`src/lib/mapping-api.ts`），数据在 `product_mappings`，tenantId 固定为 `CLOUD_MAPPING_TENANT_ID`
+  （`__cloud_warehouse__`，**不是** tenants 表里的行，租户令牌/控制台都够不到）
+- `GET /api/public/dispatch-mapping`（API Key）—— 云仓版桌面端出派单表时拉取，响应形状同 `/api/ys/{token}`
+- 导入路由的 `export const config = { api: { bodyParser: false } }` 必须**字面量写在路由文件里**，
+  从别处 import 过来 Next 不认（build 会警告），导入就会坏
+
 **公开 API** (需 API Key):
 - `GET /api/public/merchants` - 获取启用消息通知的商家列表
 - `POST /api/public/send-message` - 发送企业微信消息

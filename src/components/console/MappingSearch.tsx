@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 // 标题行 → 搜索卡片 → 操作按钮行。
 
 interface MappingSearchProps {
+  /** 映射表接口前缀，导出/模板链接挂在它下面（控制台与云仓内部后台各一个） */
+  apiBase: string;
   keyword: string;
   onKeywordChange: (value: string) => void;
   onSearch: () => void;
@@ -20,6 +22,7 @@ interface MappingSearchProps {
 }
 
 export default function MappingSearch({
+  apiBase,
   keyword,
   onKeywordChange,
   onSearch,
@@ -75,13 +78,13 @@ export default function MappingSearch({
             {importing ? '导入中…' : '导入 xlsx'}
           </Button>
           <Button variant="outline" size="sm" asChild className="h-8 px-3 text-sm">
-            <a href="/api/console/mappings/export">
+            <a href={`${apiBase}/export`}>
               <FileDown className="mr-1 h-3.5 w-3.5" />
               导出 xlsx
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild className="h-8 px-3 text-sm">
-            <a href="/api/console/mappings/template">
+            <a href={`${apiBase}/template`}>
               <Download className="mr-1 h-3.5 w-3.5" />
               下载模板
             </a>

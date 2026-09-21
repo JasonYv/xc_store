@@ -14,6 +14,7 @@ import {
   UserCog,
   FileText,
   ImagePlus,
+  TableProperties,
 } from "lucide-react"
 
 import {
@@ -80,6 +81,11 @@ const warehouseNavItems = [
     title: "余货/客退",
     url: "/dashboard/return-details",
     icon: PackageX,
+  },
+  {
+    title: "派单映射表",
+    url: "/dashboard/dispatch-mappings",
+    icon: TableProperties,
   },
   {
     title: "图片水印",
